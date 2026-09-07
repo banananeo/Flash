@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brutal-border: 4px solid #000;
+}
+
+html, body {
+  background: #FFF6E9;
+  font-family: 'Space Grotesk', sans-serif;
+  overflow-x: hidden;
+}
+
+body {
+  background-image:
+    linear-gradient(to right, rgba(0,0,0,0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,0,0,0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+  min-height: 100vh;
+}
+
+/* chunky selection */
+::selection {
+  background: #FFDE59;
+  color: #000;
+}
+
+/* hard scrollbar */
+::-webkit-scrollbar { width: 14px; }
+::-webkit-scrollbar-track { background: #FFF6E9; border-left: 3px solid #000; }
+::-webkit-scrollbar-thumb { background: #000; border: 2px solid #FFF6E9; }
+::-webkit-scrollbar-thumb:hover { background: #FF6B9D; }
+
+@layer components {
+  .btn-brutal {
+    @apply border-[3px] border-black font-black uppercase tracking-tight shadow-brutal-sm transition-all duration-150 active:translate-x-[4px] active:translate-y-[4px] active:shadow-none select-none;
+  }
+  .card-brutal {
+    @apply border-[4px] border-black bg-white shadow-brutal;
+  }
+  .badge-brutal {
+    @apply border-[3px] border-black px-2.5 py-0.5 text-xs font-black uppercase tracking-widest shadow-brutal-xs;
+  }
+  .input-brutal {
+    @apply border-[3px] border-black bg-white px-4 py-2 font-bold placeholder:text-black/40 focus:outline-none focus:shadow-brutal-sm shadow-brutal-xs transition-shadow;
+  }
+}
+
+@layer utilities {
+  .text-stroke {
+    -webkit-text-stroke: 2px #000;
+    color: transparent;
+  }
+  .text-stroke-white {
+    -webkit-text-stroke: 2px #fff;
+    color: transparent;
+  }
+  .halftone {
+    background-image: radial-gradient(#000 1.2px, transparent 1.2px);
+    background-size: 12px 12px;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .preserve-3d { transform-style: preserve-3d; }
+  .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+  .perspective-1000 { perspective: 1000px; }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 22s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
