@@ -29,11 +29,9 @@ export const useNewsStore = create((set, get) => ({
 
   fetchNews: async (category) => {
     const cat = category ?? get().category
-    const key = import.meta.env.VITE_GNEWS
-    if (!key) {
-      set({ status: 'mock', source: 'mock', error: 'No API key — showing mock' })
-      return
-    }
+    // NOTE: no client-key gate here — the same-origin /api/gnews proxy
+    // (Vite dev + Vercel prod) holds the key server-side. fetchGNews tries
+    // the proxy first and only needs VITE_GNEWS for direct fallback.
     set({ status: 'loading', error: null })
     try {
       const { articles } = await fetchGNews(cat, 10)

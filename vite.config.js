@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const footballKey = env.VITE_FOOTBALL || env.VITE_FOOTBALL_API_KEY || process.env.VITE_FOOTBALL || process.env.VITE_FOOTBALL_API_KEY || ''
   const cricKey = env.VITE_CRICAPI || env.VITE_CRICAPI_KEY || process.env.VITE_CRICAPI || process.env.VITE_CRICAPI_KEY || ''
+  const gnewsKey = env.VITE_GNEWS || process.env.VITE_GNEWS || ''
   return {
   plugins: [
     react(),
@@ -63,6 +64,21 @@ export default defineConfig(({ mode }) => {
   server: {
     proxy: {
       // NOTE: specific routes must come BEFORE generic '/api' (prefix match)
+      // GNews: client calls /api/gnews?category=sports&max=10 — key injected server-side (dev parity with Vercel api/gnews.js)
+      '/api/gnews': {
+        target: 'https://gnews.io',
+        changeOrigin: true,
+        rewrite: (p) => {
+          const u = new URL(p, 'http://localhost')
+          const params = new URLSearchParams(u.search)
+          params.delete('apikey')
+          if (gnewsKey) params.set('apikey', gnewsKey)
+          if (!params.get('lang')) params.set('lang', 'en')
+          if (!params.get('country')) params.set('country', 'us')
+          if (!params.get('max')) params.set('max', '10')
+          return `/api/v4/top-headlines?${params}`
+        },
+      },
       // Football: client calls /api/football/fixtures?live=all — key injected server-side
       '/api/football': {
         target: 'https://v3.football.api-sports.io',

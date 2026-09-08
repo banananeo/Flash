@@ -50,10 +50,9 @@ export const useScoreStore = create((set, get) => ({
     set({ status: 'loading', error: null })
     try {
       if (s === 'football') {
-        if (!import.meta.env.VITE_FOOTBALL) {
-          set({ status: 'mock', source: { ...get().source, football: 'mock' }, error: 'Add VITE_FOOTBALL for live — showing mock' })
-          return
-        }
+        // NOTE: no client-key gate — /api/football proxy holds the key
+        // server-side (Vite dev + Vercel prod). fetchFootballLive falls
+        // back to direct only if the proxy lacks the key.
         const { matches } = await fetchFootballLive()
         if (matches.length) {
           set((st) => ({ football: matches, status: 'live', source: { ...st.source, football: 'live' } }))

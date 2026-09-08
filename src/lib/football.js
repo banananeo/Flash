@@ -26,14 +26,21 @@ function mapFixture(f) {
   }
 }
 
-async function fetchViaProxy() {
-  const res = await fetch('/api/football/fixtures?live=all')
+function friendlyFootballError(e) {
+  if (e instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(e?.message || '')) {
+    return new Error('Network blocked — check connection / ad-blocker / VPN — showing mock')
+  }
+  return e
+}
+
+async function fetchViaProxy(path) {
+  const res = await fetch(`/api/football${path}`)
   if (res.status === 404) throw new Error('proxy-miss')
   return res
 }
 
-async function fetchDirect(key) {
-  return fetch('https://v3.football.api-sports.io/fixtures?live=all', {
+async function fetchDirect(path, key) {
+  return fetch(`https://v3.football.api-sports.io${path}`, {
     headers: { 'x-apisports-key': key },
   })
 }
@@ -48,18 +55,37 @@ export async function fetchFootballLive() {
   } catch { /* ignore */ }
 
   const key = import.meta.env.VITE_FOOTBALL
-  if (!key) throw new Error('Add VITE_FOOTBALL for live — showing mock')
+  const path = '/fixtures?live=all'
 
+  // 1) Same-origin proxy first — works in dev (Vite) AND prod (Vercel
+  // serverless api/football.js). No client key required.
   let res
   try {
-    res = await fetchViaProxy()
-    // proxy without key → 401: retry direct with key from bundle
-    if (res.status === 401 || res.status === 403) res = await fetchDirect(key)
-  } catch {
-    res = await fetchDirect(key)
+    res = await fetchViaProxy(path)
+    // proxy without key → 401/403/500: retry direct with bundled key
+    if ((res.status === 401 || res.status === 403 || res.status === 500) && key) {
+      res = await fetchDirect(path, key)
+    }
+  } catch (e) {
+    // proxy-miss / network → direct fallback needs the client key
+    if (!key) throw friendlyFootballError(e)
+    try {
+      res = await fetchDirect(path, key)
+    } catch (e2) {
+      throw friendlyFootballError(e2)
+    }
   }
+  if (!res) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
   if (res.status === 429) throw new Error('Football quota hit — showing mock')
-  if (!res.ok) throw new Error(`Football error ${res.status}`)
+  if (res.status === 500) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
+  if (!res.ok) {
+    let msg = `Football error ${res.status}`
+    try {
+      const err = await res.clone().json()
+      if (err?.error) msg = String(err.error).slice(0, 160)
+    } catch { /* keep default */ }
+    throw new Error(msg)
+  }
   const data = await res.json()
   if (data.errors && Object.keys(data.errors).length) {
     throw new Error(`Football key error: ${Object.values(data.errors).flat().join(' ')}`)
@@ -72,19 +98,23 @@ export async function fetchFootballLive() {
   return { matches, cached: false }
 }
 
-// Full scoreboard: events for one fixture (direct, needs key)
+// Full scoreboard: events for one fixture (proxy first, direct fallback)
 export async function fetchFixtureDetail(fixtureId) {
   const key = import.meta.env.VITE_FOOTBALL
-  const url = `/api/football/fixtures/events?fixture=${fixtureId}`
+  const path = `/fixtures/events?fixture=${fixtureId}`
   let res
   try {
-    res = await fetch(url)
-    if (res.status === 404 || res.status === 401) throw new Error('proxy-miss')
+    res = await fetchViaProxy(path)
+    if ((res.status === 404 || res.status === 401 || res.status === 500) && key) {
+      throw new Error('proxy-miss')
+    }
   } catch {
-    if (!key) throw new Error('Football key missing')
-    res = await fetch(`https://v3.football.api-sports.io/fixtures/events?fixture=${fixtureId}`, {
-      headers: { 'x-apisports-key': key },
-    })
+    if (!key) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
+    try {
+      res = await fetchDirect(path, key)
+    } catch (e) {
+      throw friendlyFootballError(e)
+    }
   }
   if (!res.ok) throw new Error(`Fixture error ${res.status}`)
   const data = await res.json()
