@@ -73,16 +73,6 @@ export default function SplashScreen({ onDone }) {
           ))}
         </div>
 
-        {/* tagline */}
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.85 }}
-          className="relative mt-3 border-2 border-bone/40 bg-white/5 px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.25em]"
-        >
-          Brutal news + live scores<span className="ml-1 inline-block h-3 w-2 animate-pulse bg-brutal-yellow align-middle" />
-        </motion.p>
-
         {/* loading bar */}
         <div className="relative mt-8 w-56 sm:w-72">
           <motion.div
