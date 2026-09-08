@@ -65,13 +65,13 @@ export default function ScoreboardModal() {
               exit={{ scale: 0.9, rotate: 2, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 26 }}
               onClick={(e) => e.stopPropagation()}
-              className="card-brutal w-full max-w-lg bg-brutal-cream p-4 sm:p-5"
+              className="card-brutal w-full max-w-lg bg-brutal-cream p-4 dark:border-bone dark:bg-surface dark:text-bone sm:p-5"
             >
               <div className="mb-3 flex items-center justify-between">
                 <span className="badge-brutal bg-black text-white">
                   {selected.sport === 'football' ? '⚽ FOOTBALL BOARD' : '🏏 CRICKET BOARD'}
                 </span>
-                <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={closeMatch} className="btn-brutal bg-white p-2" aria-label="Close">
+                <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={closeMatch} className="btn-brutal bg-white p-2 text-black dark:border-bone dark:bg-raised dark:text-bone" aria-label="Close">
                   <X size={20} strokeWidth={3} />
                 </motion.button>
               </div>

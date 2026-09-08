@@ -1,9 +1,16 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        // Refined brutalist-after-dark: near-black ink, elevated surface,
+        // bone for borders/text on dark. Accent fills stay identical.
+        ink: '#0D0D12',
+        surface: '#17171E',
+        raised: '#20202A',
+        bone: '#F5F1E6',
         brutal: {
           yellow: '#FFDE59',
           pink: '#FF6B9D',
@@ -51,7 +58,7 @@ export default {
         },
       },
       animation: {
-        marquee: 'marquee 22s linear infinite',
+        marquee: 'marquee 60s linear infinite',
         wiggle: 'wiggle 0.5s ease-in-out infinite',
         floaty: 'floaty 3s ease-in-out infinite',
         'spin-slow': 'spinSlow 12s linear infinite',

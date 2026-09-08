@@ -58,14 +58,14 @@ export default function ArticleModal({ article, onClose }) {
             onClick={onClose}
             className="fixed inset-0 z-50 bg-black/60"
           />
-          <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4" onClick={onClose}>
+          <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-3 sm:p-4" onClick={onClose}>
             <motion.div
               initial={{ scale: 0.85, rotate: -2, y: 30, opacity: 0 }}
               animate={{ scale: 1, rotate: 0, y: 0, opacity: 1 }}
               exit={{ scale: 0.9, rotate: 2, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 26 }}
               onClick={(e) => e.stopPropagation()}
-              className="card-brutal flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden bg-brutal-cream"
+              className="card-brutal flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden bg-brutal-cream dark:border-bone dark:bg-surface dark:text-bone sm:max-h-[85vh]"
               role="dialog"
               aria-modal="true"
               aria-label={article.title}
@@ -89,11 +89,11 @@ export default function ArticleModal({ article, onClose }) {
               {/* body */}
               <div className="overflow-y-auto p-4 sm:p-5">
                 {article.image && (
-                  <img src={article.image} alt="" className="mb-3 h-44 w-full border-[3px] border-black object-cover sm:h-56" draggable={false} />
+                  <img src={article.image} alt="" className="mb-3 h-44 w-full border-[3px] border-black object-cover dark:border-bone sm:h-56" draggable={false} />
                 )}
                 <h2 className="font-black text-xl leading-tight tracking-tight">{article.title}</h2>
                 {data?.byline && (
-                  <p className="mt-1 font-mono text-xs font-bold uppercase text-black/60">By {data.byline}</p>
+                  <p className="mt-1 font-mono text-xs font-bold uppercase text-black/60 dark:text-bone/60">By {data.byline}</p>
                 )}
 
                 {loading && (
@@ -106,9 +106,20 @@ export default function ArticleModal({ article, onClose }) {
                 )}
 
                 {error && !loading && (
-                  <div className="mt-4 border-[3px] border-black bg-brutal-yellow p-4 shadow-brutal-sm">
+                  <div className="mt-4 border-[3px] border-black bg-brutal-yellow p-4 text-black shadow-brutal-sm dark:border-bone">
                     <p className="text-sm font-black uppercase">Couldn't pull the full text in-app</p>
                     <p className="mt-1 text-sm font-medium">{error}</p>
+                    <p className="mt-2 border-2 border-black bg-white p-2 text-[13px] font-medium leading-snug">{article.summary}</p>
+                  </div>
+                )}
+
+                {!article.url && !loading && (
+                  <div className="mt-4 border-[3px] border-black bg-brutal-yellow p-4 text-black shadow-brutal-sm dark:border-bone">
+                    <p className="text-sm font-black uppercase">Preview card</p>
+                    <p className="mt-1 text-sm font-medium">
+                      This is a built-in preview story, so there is no publisher page to pull.
+                      Live stories load their full text here.
+                    </p>
                     <p className="mt-2 border-2 border-black bg-white p-2 text-[13px] font-medium leading-snug">{article.summary}</p>
                   </div>
                 )}
@@ -124,12 +135,12 @@ export default function ArticleModal({ article, onClose }) {
 
               {/* footer — original link always available */}
               {article.url && (
-                <div className="border-t-[4px] border-black bg-white p-3">
+                <div className="border-t-[4px] border-black bg-white p-3 dark:border-bone dark:bg-raised">
                   <a
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="btn-brutal flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm text-white"
+                    className="btn-brutal flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm text-white dark:border-bone"
                   >
                     <ExternalLink size={16} strokeWidth={3} /> OPEN ORIGINAL • {article.source}
                   </a>

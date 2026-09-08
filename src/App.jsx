@@ -1,5 +1,7 @@
-import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Newspaper, ThumbsDown, ThumbsUp, Trophy } from 'lucide-react'
+import SplashScreen from './components/SplashScreen'
 import Header from './components/Header'
 import Marquee from './components/Marquee'
 import CategoryPills from './components/CategoryPills'
@@ -22,7 +24,7 @@ function ReactionPanel() {
         initial={{ x: 40, opacity: 0, rotate: 1 }}
         animate={{ x: 0, opacity: 1, rotate: 1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-        className="card-brutal bg-white p-5"
+        className="card-brutal bg-white p-5 dark:border-bone dark:bg-surface"
       >
         <div className="grid grid-cols-2 gap-3 text-center">
           <div className="border-[3px] border-black bg-brutal-mint p-3 shadow-brutal-xs">
@@ -40,7 +42,7 @@ function ReactionPanel() {
           <motion.button
             whileTap={{ scale: 0.92 }}
             onClick={clearReactions}
-            className="btn-brutal mt-3 w-full bg-black px-4 py-2 text-xs text-white"
+            className="btn-brutal mt-3 w-full bg-black px-4 py-2 text-xs text-white dark:border-bone"
           >
             Clear reactions
           </motion.button>
@@ -51,7 +53,7 @@ function ReactionPanel() {
         initial={{ x: 40, opacity: 0, rotate: -1 }}
         animate={{ x: 0, opacity: 1, rotate: -1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.1 }}
-        className="card-brutal bg-black p-5 text-white"
+        className="card-brutal bg-black p-5 text-white dark:border-bone dark:bg-surface dark:text-bone"
       >
         <p className="inline-block -rotate-2 border-2 border-brutal-yellow bg-brutal-yellow px-2 py-0.5 font-black text-sm text-black">
           LIKED ★ {likes.length}
@@ -94,7 +96,7 @@ function ViewSwitcher() {
             key={t.id}
             whileTap={{ scale: 0.96 }}
             onClick={() => setView(t.id)}
-            className={`relative flex items-center justify-center gap-2 border-[4px] border-black px-4 py-2.5 font-black text-base uppercase tracking-tight ${active ? 'text-white shadow-brutal' : 'shadow-brutal-sm'}`}
+            className={`relative flex items-center justify-center gap-2 border-[4px] border-black px-4 py-2.5 font-black text-base uppercase tracking-tight dark:border-bone ${active ? 'text-white shadow-brutal' : 'text-black shadow-brutal-sm'}`}
             style={{ backgroundColor: active ? '#000' : t.bg }}
           >
             {active && (
@@ -116,9 +118,16 @@ function ViewSwitcher() {
 
 export default function App() {
   const view = useScoreStore((s) => s.view)
+  const [splash, setSplash] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 2100)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
-    <div className="min-h-screen font-grotesk text-black">
+    <div className="min-h-screen font-grotesk text-black transition-colors dark:bg-ink dark:text-bone">
+      <AnimatePresence>{splash && <SplashScreen onDone={() => setSplash(false)} />}</AnimatePresence>
       <Header />
       <Marquee />
 
@@ -142,7 +151,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t-[4px] border-black bg-black py-4 text-center font-black text-sm uppercase tracking-widest text-white">
+      <footer className="border-t-[4px] border-black bg-black py-4 text-center font-black text-sm uppercase tracking-widest text-white dark:border-bone dark:bg-surface dark:text-bone">
         News By Sabareesh
       </footer>
 

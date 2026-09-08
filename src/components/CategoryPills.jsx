@@ -16,8 +16,8 @@ export default function CategoryPills() {
             whileHover={{ y: -3, rotate: active ? 0 : -1 }}
             whileTap={{ scale: 0.9, rotate: 2 }}
             onClick={() => setCategory(c.id)}
-            className={`relative shrink-0 border-[3px] border-black px-4 py-1.5 text-sm font-black uppercase tracking-wide transition-shadow ${
-              active ? 'text-white shadow-brutal-sm' : 'bg-white shadow-brutal-xs hover:shadow-brutal-sm'
+            className={`relative shrink-0 border-[3px] border-black px-4 py-1.5 text-sm font-black uppercase tracking-wide transition-shadow dark:border-bone ${
+              active ? 'text-white shadow-brutal-sm' : 'bg-white text-black shadow-brutal-xs hover:shadow-brutal-sm dark:bg-surface dark:text-bone'
             }`}
             style={{ backgroundColor: active ? '#000' : c.bg === '#000000' ? '#fff' : c.bg }}
           >

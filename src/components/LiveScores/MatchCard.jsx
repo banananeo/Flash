@@ -34,7 +34,7 @@ export default function MatchCard({ match, index = 0 }) {
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 300, damping: 26, delay: Math.min(index * 0.04, 0.3) }}
       onClick={() => openMatch(match)}
-      className="flex w-full items-center gap-3 border-[3px] border-black bg-white p-3 text-left shadow-brutal-sm active:shadow-none"
+      className="flex w-full items-center gap-3 border-[3px] border-black bg-white p-3 text-left text-black shadow-brutal-sm active:shadow-none dark:border-bone dark:bg-surface dark:text-bone"
     >
       {match.sport === 'football' ? (
         <>
@@ -42,7 +42,7 @@ export default function MatchCard({ match, index = 0 }) {
             <TeamLogo logo={match.teamA.logo} short={match.teamA.short} />
             <span className="truncate font-black text-sm">{match.teamA.name}</span>
           </div>
-          <div className="flex shrink-0 items-center gap-2 border-[3px] border-black bg-black px-2.5 py-1 text-white">
+          <div className="flex shrink-0 items-center gap-2 border-[3px] border-black bg-black px-2.5 py-1 text-white dark:border-bone">
             <span className="font-black text-xl leading-none">{match.teamA.score}</span>
             <span className="flex flex-col items-center">
               {isLive ? <LiveDot /> : <span className="font-mono text-[9px] font-bold">{match.minute}</span>}
@@ -60,9 +60,9 @@ export default function MatchCard({ match, index = 0 }) {
         <>
           <div className="min-w-0 flex-1">
             <p className="truncate font-black text-sm leading-tight">
-              {match.teamA.short} {match.teamA.score} <span className="font-mono text-[10px] text-black/50">vs</span> {match.teamB.short} {match.teamB.score}
+              {match.teamA.short} {match.teamA.score} <span className="font-mono text-[10px] text-black/50 dark:text-bone/50">vs</span> {match.teamB.short} {match.teamB.score}
             </p>
-            <p className="truncate font-mono text-[10px] font-bold uppercase text-black/60">
+            <p className="truncate font-mono text-[10px] font-bold uppercase text-black/60 dark:text-bone/60">
               {match.meta?.need || match.league}
             </p>
           </div>
@@ -71,7 +71,7 @@ export default function MatchCard({ match, index = 0 }) {
               <LiveDot /> LIVE
             </span>
           ) : (
-            <span className="shrink-0 border-2 border-black bg-black px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">FT</span>
+            <span className="shrink-0 border-2 border-black bg-black px-1.5 py-0.5 font-mono text-[10px] font-bold text-white dark:border-bone">FT</span>
           )}
           <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
         </>

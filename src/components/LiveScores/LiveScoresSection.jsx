@@ -44,9 +44,9 @@ export default function LiveScoresSection() {
 
   return (
     <section id="live-scores" className="mx-auto w-full max-w-2xl scroll-mt-24">
-      <div className="card-brutal bg-white p-4 sm:p-5">
+      <div className="card-brutal bg-white p-4 dark:border-bone dark:bg-surface dark:text-bone sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-2 border-[3px] border-black bg-black px-3 py-1 font-black text-lg text-white">
+          <span className="flex items-center gap-2 border-[3px] border-black bg-black px-3 py-1 font-black text-lg text-white dark:border-bone">
             <Trophy size={18} strokeWidth={3} className="text-brutal-yellow" /> LIVE SCORES
           </span>
           <span className="badge-brutal bg-brutal-red text-white">{liveCount} LIVE NOW</span>
@@ -61,7 +61,7 @@ export default function LiveScoresSection() {
               } catch { /* ignore */ }
               fetchScores(sport)
             }}
-            className="btn-brutal ml-auto flex items-center gap-1 bg-white px-3 py-1.5 text-xs"
+            className="btn-brutal ml-auto flex items-center gap-1 bg-white px-3 py-1.5 text-xs text-black dark:border-bone dark:bg-raised dark:text-bone"
           >
             <RefreshCw size={14} strokeWidth={3} /> Refresh
           </motion.button>
@@ -76,7 +76,7 @@ export default function LiveScoresSection() {
                 key={t.id}
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setSport(t.id)}
-                className={`relative border-[3px] border-black px-4 py-2.5 text-sm font-black uppercase ${active ? 'text-white shadow-brutal-sm' : 'shadow-brutal-xs'}`}
+                className={`relative border-[3px] border-black px-4 py-2.5 text-sm font-black uppercase dark:border-bone ${active ? 'text-white shadow-brutal-sm' : 'text-black shadow-brutal-xs'}`}
                 style={{ backgroundColor: active ? '#000' : t.bg }}
               >
                 {active && (
@@ -95,9 +95,9 @@ export default function LiveScoresSection() {
         </div>
 
         {error && (
-          <div className="mt-3 flex items-center justify-between gap-2 border-[3px] border-black bg-brutal-yellow px-3 py-1.5 text-xs font-black shadow-brutal-xs">
+          <div className="mt-3 flex items-center justify-between gap-2 border-[3px] border-black bg-brutal-yellow px-3 py-1.5 text-xs font-black text-black shadow-brutal-xs dark:border-bone">
             <span className="truncate">{error}</span>
-            <button onClick={() => fetchScores(sport)} className="shrink-0 border-2 border-black bg-white px-2 py-0.5">RETRY</button>
+            <button onClick={() => fetchScores(sport)} className="shrink-0 border-2 border-black bg-white px-2 py-0.5 text-black dark:border-bone dark:bg-surface dark:text-bone">RETRY</button>
           </div>
         )}
       </div>
@@ -107,7 +107,7 @@ export default function LiveScoresSection() {
         <AnimatePresence mode="popLayout">
           {status === 'loading' && !matches.length ? (
             [0, 1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse border-[3px] border-black bg-white p-4 shadow-brutal-sm">
+              <div key={i} className="animate-pulse border-[3px] border-black bg-white p-4 shadow-brutal-sm dark:border-bone dark:bg-surface">
                 <div className="h-4 bg-black/20" />
                 <div className="mt-2 h-6 bg-black/40" />
               </div>
@@ -119,11 +119,11 @@ export default function LiveScoresSection() {
               )}
               {liveMatches.map((m, i) => <MatchCard key={m.id} match={m} index={i} />)}
               {doneMatches.length > 0 && (
-                <p className="badge-brutal mt-1 w-fit bg-black text-white">Finished / Scheduled ({doneMatches.length})</p>
+                <p className="badge-brutal mt-1 w-fit bg-black text-white dark:border-bone">Finished / Scheduled ({doneMatches.length})</p>
               )}
               {doneMatches.map((m, i) => <MatchCard key={m.id} match={m} index={i} />)}
               {!matches.length && (
-                <div className="card-brutal bg-brutal-yellow p-6 text-center font-black">
+                <div className="card-brutal bg-brutal-yellow p-6 text-center font-black text-black dark:border-bone">
                   NO MATCHES — CHECK BACK SOON
                 </div>
               )}
@@ -131,7 +131,7 @@ export default function LiveScoresSection() {
           )}
         </AnimatePresence>
       </div>
-      <p className="mt-3 text-center font-mono text-[10px] font-bold uppercase text-black/50">
+      <p className="mt-3 text-center font-mono text-[10px] font-bold uppercase text-black/50 dark:text-bone/50">
         Tap any match for the full scoreboard • Auto-refreshes every 60s
       </p>
     </section>

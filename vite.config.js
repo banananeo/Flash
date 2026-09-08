@@ -70,13 +70,14 @@ export default defineConfig(({ mode }) => {
     articleDevMiddleware(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'logo.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512.png'],
+      includeAssets: ['favicon.svg', 'logo.svg', 'apple-touch-icon.png', 'apple-splash-1170x2532.png', 'apple-splash-1290x2796.png', 'apple-splash-2048x2732.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512.png'],
       manifest: {
         name: 'FLASH! — Brutal News + Live Scores',
         short_name: 'FLASH!',
         description: 'Neo-brutalist news flash cards with live football + cricket scores.',
         theme_color: '#FFDE59',
-        background_color: '#FFF6E9',
+        // ink-black OS splash to match the in-app boot screen
+        background_color: '#0D0D12',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

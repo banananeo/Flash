@@ -6,7 +6,7 @@ import { useNewsStore } from '../store/useNewsStore'
 
 function LoadingCard() {
   return (
-    <div className="card-brutal absolute inset-0 flex flex-col overflow-hidden bg-white">
+    <div className="card-brutal absolute inset-0 flex flex-col overflow-hidden bg-white dark:border-bone dark:bg-surface dark:text-bone">
       <div className="h-44 animate-pulse border-b-[4px] border-black bg-brutal-yellow sm:h-52" />
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div className="h-7 animate-pulse border-[3px] border-black bg-black/80" />
@@ -56,7 +56,7 @@ export default function CardStack() {
   if (status === 'loading' && !current) {
     return (
       <div className="mx-auto w-full max-w-md">
-        <div className="relative h-[540px] sm:h-[560px]">
+        <div className="relative h-[clamp(430px,68dvh,540px)] sm:h-[560px]">
           <LoadingCard />
         </div>
       </div>
@@ -94,7 +94,7 @@ export default function CardStack() {
     <div className="mx-auto w-full max-w-md">
       {/* progress + source */}
       <div className="mb-3 flex items-center gap-2">
-        <div className="h-5 flex-1 border-[3px] border-black bg-white shadow-brutal-xs">
+        <div className="h-5 flex-1 border-[3px] border-black bg-white shadow-brutal-xs dark:border-bone dark:bg-surface">
           <motion.div className="h-full bg-brutal-mint" animate={{ width: `${progress}%` }} transition={{ type: 'spring', stiffness: 120, damping: 20 }} />
         </div>
         <span className={`badge-brutal ${source === 'live' ? 'bg-brutal-mint' : 'bg-brutal-yellow'}`}>
@@ -105,16 +105,17 @@ export default function CardStack() {
         </span>
       </div>
       {error && (
-        <div className="mb-3 flex items-center justify-between gap-2 border-[3px] border-black bg-brutal-pink px-3 py-1.5 text-xs font-black shadow-brutal-xs">
+        <div className="mb-3 flex items-center justify-between gap-2 border-[3px] border-black bg-brutal-pink px-3 py-1.5 text-xs font-black text-black shadow-brutal-xs dark:border-bone">
           <span className="truncate">{error}</span>
-          <button onClick={() => fetchNews(category)} className="shrink-0 border-2 border-black bg-white px-2 py-0.5">
+          <button onClick={() => fetchNews(category)} className="shrink-0 border-2 border-black bg-white px-2 py-0.5 text-black dark:border-bone dark:bg-surface dark:text-bone">
             RETRY
           </button>
         </div>
       )}
 
-      {/* single card — no stack */}
-      <div className="relative h-[540px] sm:h-[560px]">
+      {/* single card — no stack. dvh clamp keeps the whole card
+          (including the back-side button) on-screen on short phones. */}
+      <div className="relative h-[clamp(430px,68dvh,540px)] sm:h-[560px]">
         <AnimatePresence mode="popLayout">
           {status === 'loading' ? (
             <LoadingCard key="loading" />
@@ -162,7 +163,7 @@ export default function CardStack() {
           <ThumbsUp size={20} strokeWidth={3} /> LIKE
         </motion.button>
       </div>
-      <p className="mt-2 text-center font-mono text-[11px] font-bold uppercase text-black/60">
+      <p className="mt-2 text-center font-mono text-[11px] font-bold uppercase text-black/60 dark:text-bone/60">
         drag / ← → keys / tap card to flip
       </p>
     </div>

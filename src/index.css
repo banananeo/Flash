@@ -20,6 +20,24 @@ body {
   min-height: 100vh;
 }
 
+/* ===== Refined brutalist dark theme =====
+   Accent fills (yellow/mint/pink/…) stay identical in both themes.
+   Only scaffolding inverts: page ink, raised surfaces, bone borders/text.
+   Hard shadows stay black — on ink they read as subtle depth while the
+   bone borders carry the brutalist edge. */
+.dark html, .dark body {
+  background: #0D0D12;
+}
+.dark body {
+  background-image:
+    linear-gradient(to right, rgba(245,241,230,0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245,241,230,0.055) 1px, transparent 1px);
+  color: #F5F1E6;
+}
+.dark ::-webkit-scrollbar-track { background: #0D0D12; border-left: 3px solid #F5F1E6; }
+.dark ::-webkit-scrollbar-thumb { background: #F5F1E6; border-color: #0D0D12; }
+.dark ::selection { background: #FFDE59; color: #000; }
+
 /* chunky selection */
 ::selection {
   background: #FFDE59;
@@ -67,10 +85,17 @@ body {
   .perspective-1000 { perspective: 1000px; }
 }
 
+/* Explicit keyframes: tailwind only emits its `marquee` keyframes when the
+   `animate-marquee` utility is used — the ticker uses this plain class, so
+   without this the bar never slides. */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
 .marquee-track {
   display: flex;
   width: max-content;
-  animation: marquee 22s linear infinite;
+  animation: marquee 60s linear infinite;
 }
 .marquee-track:hover {
   animation-play-state: paused;
