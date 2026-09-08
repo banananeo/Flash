@@ -1,6 +1,6 @@
 // GNews → app shape. Summary-only: we use description/content snippet,
 // never fetch full article bodies.
-const API_KEY = import.meta.env.VITE_GNEWS_API_KEY
+const API_KEY = import.meta.env.VITE_GNEWS
 
 // our pill id → GNews category (omit param for 'all' = mixed top headlines)
 const GNEWS_CATEGORY = {
@@ -32,7 +32,7 @@ function mapArticle(a, pillId, i) {
 }
 
 export async function fetchGNews(pillId = 'all', max = 10) {
-  if (!API_KEY) throw new Error('Missing VITE_GNEWS_API_KEY')
+  if (!API_KEY) throw new Error('Missing VITE_GNEWS')
   const gcat = GNEWS_CATEGORY[pillId] ?? null
 
   // 10-min cache to protect the 100 req/day free quota

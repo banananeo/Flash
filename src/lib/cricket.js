@@ -32,14 +32,14 @@ export async function fetchCricketLive() {
     }
   } catch { /* ignore */ }
 
-  const key = import.meta.env.VITE_CRICAPI_KEY
+  const key = import.meta.env.VITE_CRICAPI
   // dev: try proxy first (no key in URL), fall back to direct with key
   let res
   try {
     res = await fetch('/api/cricket/cricScore')
     if (res.status === 404) throw new Error('proxy-miss')
   } catch {
-    if (!key) throw new Error('Cricket key missing — add VITE_CRICAPI_KEY')
+    if (!key) throw new Error('Cricket key missing — add VITE_CRICAPI')
     res = await fetch(`https://api.cricapi.com/v1/cricScore?apikey=${key}`)
   }
   // proxy may need key forwarded — append if server didn't inject
@@ -61,7 +61,7 @@ export async function fetchCricketLive() {
 
 // Full scoreboard for one match
 export async function fetchCricketDetail(matchId) {
-  const key = import.meta.env.VITE_CRICAPI_KEY
+  const key = import.meta.env.VITE_CRICAPI
   const rawId = String(matchId).replace(/^cr-/, '')
   let res
   try {

@@ -29,7 +29,7 @@ export default function LiveScoresSection() {
   useEffect(() => {
     // clear stale mock cache once so fresh live data replaces it
     try {
-      if (sport === 'football' && import.meta.env.VITE_FOOTBALL_API_KEY) {
+      if (sport === 'football' && import.meta.env.VITE_FOOTBALL) {
         const c = JSON.parse(localStorage.getItem('live-cache-football') || 'null')
         if (c && c.matches?.length <= 3 && c.matches[0]?.id?.startsWith('fb') && !c.matches[0]?.rawId) {
           localStorage.removeItem('live-cache-football')

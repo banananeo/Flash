@@ -5,8 +5,8 @@ import { defineConfig, loadEnv } from 'vite'
 // PWA = installable + home-screen icon. Proxies keep API keys off the client in dev.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const footballKey = env.VITE_FOOTBALL_API_KEY || process.env.VITE_FOOTBALL_API_KEY || ''
-  const cricKey = env.VITE_CRICAPI_KEY || process.env.VITE_CRICAPI_KEY || ''
+  const footballKey = env.VITE_FOOTBALL || env.VITE_FOOTBALL_API_KEY || process.env.VITE_FOOTBALL || process.env.VITE_FOOTBALL_API_KEY || ''
+  const cricKey = env.VITE_CRICAPI || env.VITE_CRICAPI_KEY || process.env.VITE_CRICAPI || process.env.VITE_CRICAPI_KEY || ''
   return {
   plugins: [
     react(),

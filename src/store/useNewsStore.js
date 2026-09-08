@@ -29,7 +29,7 @@ export const useNewsStore = create((set, get) => ({
 
   fetchNews: async (category) => {
     const cat = category ?? get().category
-    const key = import.meta.env.VITE_GNEWS_API_KEY
+    const key = import.meta.env.VITE_GNEWS
     if (!key) {
       set({ status: 'mock', source: 'mock', error: 'No API key — showing mock' })
       return

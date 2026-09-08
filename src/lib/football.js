@@ -47,8 +47,8 @@ export async function fetchFootballLive() {
     }
   } catch { /* ignore */ }
 
-  const key = import.meta.env.VITE_FOOTBALL_API_KEY
-  if (!key) throw new Error('Add VITE_FOOTBALL_API_KEY for live — showing mock')
+  const key = import.meta.env.VITE_FOOTBALL
+  if (!key) throw new Error('Add VITE_FOOTBALL for live — showing mock')
 
   let res
   try {
@@ -74,7 +74,7 @@ export async function fetchFootballLive() {
 
 // Full scoreboard: events for one fixture (direct, needs key)
 export async function fetchFixtureDetail(fixtureId) {
-  const key = import.meta.env.VITE_FOOTBALL_API_KEY
+  const key = import.meta.env.VITE_FOOTBALL
   const url = `/api/football/fixtures/events?fixture=${fixtureId}`
   let res
   try {

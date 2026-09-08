@@ -50,8 +50,8 @@ export const useScoreStore = create((set, get) => ({
     set({ status: 'loading', error: null })
     try {
       if (s === 'football') {
-        if (!import.meta.env.VITE_FOOTBALL_API_KEY) {
-          set({ status: 'mock', source: { ...get().source, football: 'mock' }, error: 'Add VITE_FOOTBALL_API_KEY for live — showing mock' })
+        if (!import.meta.env.VITE_FOOTBALL) {
+          set({ status: 'mock', source: { ...get().source, football: 'mock' }, error: 'Add VITE_FOOTBALL for live — showing mock' })
           return
         }
         const { matches } = await fetchFootballLive()
