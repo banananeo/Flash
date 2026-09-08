@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
-import { Clock, FlipHorizontal2, Quote } from 'lucide-react'
+import { BookOpen, Clock, FlipHorizontal2, Quote } from 'lucide-react'
 import { categoryStyle } from '../data/mockNews'
 import { timeAgo } from '../hooks/useNews'
+import ArticleModal from './ArticleModal'
 
 export default function FlashCard({ article, index = 0, onSwipe, active = true }) {
   const [flipped, setFlipped] = useState(false)
   const [shakeKey, setShakeKey] = useState(0)
+  const [readerOpen, setReaderOpen] = useState(false)
   const x = useMotionValue(0)
 
   const rotate = useTransform(x, [-300, 300], [-14, 14])
@@ -34,6 +36,7 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
   const isBack = index > 0
 
   return (
+    <>
     <motion.div
       key={`${article.id}-${shakeKey}`}
       initial={{ y: 60 * (depth + 1), scale: 1 - depth * 0.06, opacity: 0, rotate: depth * 2 }}
@@ -98,7 +101,7 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
             </div>
           </div>
 
-          {/* ===== BACK: full summary, never external link ===== */}
+          {/* ===== BACK: summary + full-story entry ===== */}
           <div
             className="backface-hidden card-brutal absolute inset-0 flex flex-col p-5"
             style={{ transform: 'rotateY(180deg)', backgroundColor: cat.bg }}
@@ -109,17 +112,31 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
               </span>
               <p className="font-black text-lg uppercase tracking-tight">The gist in 30 sec</p>
             </div>
-            <div className="mt-3 flex-1 border-[3px] border-black bg-white p-4 shadow-brutal-sm">
+            <div className="mt-3 flex-1 overflow-y-auto border-[3px] border-black bg-white p-4 shadow-brutal-sm">
               <p className="text-[15px] font-medium leading-relaxed">{article.summary}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="badge-brutal bg-white">{article.source}</span>
                 <span className="badge-brutal bg-white">{timeAgo(article.publishedAt)}</span>
               </div>
             </div>
-            <p className="mt-3 text-center font-mono text-[11px] font-bold uppercase">tap to flip back • swipe to decide</p>
+            {article.url && (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={(e) => {
+                  e.stopPropagation() // don't flip the card when opening the reader
+                  setReaderOpen(true)
+                }}
+                className="btn-brutal mt-3 flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm text-white"
+              >
+                <BookOpen size={16} strokeWidth={3} /> READ FULL STORY
+              </motion.button>
+            )}
+            <p className="mt-2 text-center font-mono text-[11px] font-bold uppercase">tap to flip back • swipe to decide</p>
           </div>
         </motion.div>
       </motion.div>
     </motion.div>
+    <ArticleModal article={readerOpen ? article : null} onClose={() => setReaderOpen(false)} />
+    </>
   )
 }
