@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion'
-import { Zap } from 'lucide-react'
 
 export default function Header() {
   return (
@@ -10,9 +9,11 @@ export default function Header() {
           whileTap={{ scale: 0.96, rotate: 1 }}
           className="flex items-center gap-2 border-[4px] border-black bg-brutal-yellow px-4 py-1.5 shadow-brutal-sm"
         >
-          <span className="grid h-9 w-9 place-items-center border-[3px] border-black bg-black text-brutal-yellow">
-            <Zap size={22} strokeWidth={3} />
-          </span>
+          <img
+            src="/logo.svg"
+            alt="FLASH! logo"
+            className="h-9 w-9 border-[3px] border-black object-cover"
+          />
           <p className="font-black text-3xl tracking-tighter">FLASH!</p>
         </motion.div>
       </div>

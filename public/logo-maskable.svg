@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FLASH! logo (maskable)">
+  <title>FLASH! — F! monogram (maskable safe zone)</title>
+  <!-- Maskable variant: artwork scaled to 82% centered so launchers can
+       crop the outer ~9% per side (circle/squircle/teardrop) without clipping. -->
+  <rect width="512" height="512" fill="#000000"/>
+  <g transform="translate(256 256) scale(0.82) translate(-256 -256)" fill="#FFDE59">
+    <rect x="104" y="116" width="76" height="280"/>
+    <rect x="104" y="116" width="244" height="72"/>
+    <rect x="104" y="244" width="204" height="64"/>
+    <polygon points="396,116 328,258 366,258 342,396 428,238 386,238 412,116"/>
+    <rect x="346" y="412" width="60" height="56"/>
+  </g>
+</svg>
