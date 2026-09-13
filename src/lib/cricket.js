@@ -1,91 +1,127 @@
-// RapidAPI Cricbuzz → normalized Match shape.
-// Upstream: https://cricbuzz-cricket.p.rapidapi.com/matches/v1/live
-// Key + host injected server-side; client uses /api/cricket/live + /api/cricket/detail?id=
-// Never put the RapidAPI key in client code.
+// CricketData.org (CricAPI) → normalized Match shape.
+// Upstream: https://api.cricapi.com/v1/currentMatches + /match_info?id=
+// Key injected server-side; client uses /api/cricket/live + /api/cricket/detail?id=
+// Never put the CricketData key in client code.
 
-function fmtInnings(side) {
-  if (!side) return 'Yet to bat';
-  const i1 = side.inngs1;
-  const i2 = side.inngs2;
-  const fmt = (i) => (i ? `${i.runs ?? 0}/${i.wickets ?? 0} (${i.overs ?? 0} ov)` : null);
-  const parts = [fmt(i1), fmt(i2)].filter(Boolean);
-  return parts.length ? parts.join(' & ') : 'Yet to bat';
+function isDoneStatus(status) {
+  return /won|draw|tie|result|no result|abandoned|cancelled/i.test(status || '');
 }
 
-function shortInnings(side) {
-  if (!side?.inngs1) return 'Yet to bat';
-  const i = side.inngs1;
-  return `${i.runs ?? 0}/${i.wickets ?? 0}`;
+function isLiveMatch(m = {}) {
+  if (isDoneStatus(m.status)) return false;
+  if (Array.isArray(m.score) && m.score.length > 0) {
+    // has scores but no result yet → live (or innings break)
+    return true;
+  }
+  return /live|innings|break|trail|lead|need|day \d|session|stumps|playing/i.test(m.status || '');
 }
 
-function oversOf(side) {
-  const o = side?.inngs1?.overs;
-  return o != null ? String(o) : '';
+// CricAPI score entries look like { inning: "India Innings 1", r, w, o }
+// (older samples also carry a `team` field) — handle both shapes.
+function teamOfEntry(s) {
+  if (s?.team) return String(s.team);
+  const inning = String(s?.inning || '');
+  // strip trailing " Inning(s) N..." suffix → team name
+  const parsed = inning.replace(/\s+innings?\s+\d+.*$/i, '').trim();
+  return parsed || inning;
 }
 
-function mapCricbuzz(matchInfo = {}, matchScore = {}) {
-  const rawId = matchInfo.matchId;
-  const t1 = matchInfo.team1 || {};
-  const t2 = matchInfo.team2 || {};
-  const t1Name = t1.teamName || 'Team A';
-  const t2Name = t2.teamName || 'Team B';
-  const t1Short = t1.teamSName || t1Name.slice(0, 3).toUpperCase();
-  const t2Short = t2.teamSName || t2Name.slice(0, 3).toUpperCase();
-  const state = matchInfo.state || matchInfo.stateTitle || '';
-  const isLive = /in.?progress|^live/i.test(state);
-  const isDone = /complete|result|won|draw|tie/i.test(state) || /won|draw|tie|complete|result/i.test(matchInfo.status || '');
-  const seriesName = matchInfo.seriesName || 'Cricket';
-  const desc = matchInfo.matchDesc || '';
-  const format = matchInfo.matchFormat || '';
+function entryBelongsTo(s, team) {
+  if (!s || !team) return false;
+  if (s.team) return String(s.team).toLowerCase() === String(team).toLowerCase();
+  const inning = String(s.inning || '').toLowerCase();
+  const t = String(team).toLowerCase();
+  if (inning.startsWith(t)) return true;
+  return teamOfEntry(s).toLowerCase() === t;
+}
+
+function scoreEntriesFor(scores, team) {
+  return (scores || []).filter((s) => entryBelongsTo(s, team));
+}
+
+function fmtEntry(s) {
+  return `${s.r ?? 0}/${s.w ?? 0}`;
+}
+
+function fmtEntryFull(s) {
+  return `${s.r ?? 0}/${s.w ?? 0} (${s.o ?? 0} ov)`;
+}
+
+function shortScore(scores, team) {
+  const list = scoreEntriesFor(scores, team);
+  if (!list.length) return 'Yet to bat';
+  return list.map(fmtEntry).join(' & ');
+}
+
+function fullScore(scores, team) {
+  const list = scoreEntriesFor(scores, team);
+  if (!list.length) return 'Yet to bat';
+  return list.map(fmtEntryFull).join(' & ');
+}
+
+function oversOf(scores, team) {
+  const list = scoreEntriesFor(scores, team);
+  if (!list.length) return '';
+  return list.map((s) => String(s.o ?? '')).filter(Boolean).join(' & ');
+}
+
+const shortOf = (name) => String(name || '').slice(0, 3).toUpperCase();
+
+export function mapCricData(m = {}) {
+  const rawId = m.id;
+  const teams = m.teams || [];
+  const scores = Array.isArray(m.score) ? m.score : [];
+  const t1Name = teams[0] || 'Team A';
+  const t2Name = teams[1] || 'Team B';
+  const format = String(m.matchType || '').toUpperCase();
+  const name = m.name || `${t1Name} vs ${t2Name}`;
+  const live = isLiveMatch(m);
+  const done = isDoneStatus(m.status);
   return {
     id: `cr-${rawId}`,
     sport: 'cricket',
-    league: `${seriesName}${desc ? ` • ${desc}` : ''}${format ? ` • ${format}` : ''}`,
-    leagueName: seriesName,
+    league: `${format ? `${format} • ` : ''}${name}`,
+    leagueName: format || 'Cricket',
     format,
-    // cricket series carry no league-country; country filter matches team names
+    // CricData free Match carries no series/country; country filter matches team names
     country: '',
-    status: isLive ? 'live' : isDone ? 'ft' : 'scheduled',
+    status: live ? 'live' : done ? 'ft' : 'scheduled',
     teamA: {
       name: t1Name,
-      short: t1Short,
-      score: shortInnings(matchScore.team1Score),
-      fullScore: fmtInnings(matchScore.team1Score),
-      overs: oversOf(matchScore.team1Score),
+      short: shortOf(t1Name),
+      score: shortScore(scores, t1Name),
+      fullScore: fullScore(scores, t1Name),
+      overs: oversOf(scores, t1Name),
     },
     teamB: {
       name: t2Name,
-      short: t2Short,
-      score: shortInnings(matchScore.team2Score),
-      fullScore: fmtInnings(matchScore.team2Score),
-      overs: oversOf(matchScore.team2Score),
+      short: shortOf(t2Name),
+      score: shortScore(scores, t2Name),
+      fullScore: fullScore(scores, t2Name),
+      overs: oversOf(scores, t2Name),
     },
-    meta: { need: matchInfo.status || state || '', crr: '', lastWicket: '' },
+    meta: { need: m.status || '', crr: '', lastWicket: '' },
     recentBalls: [],
     batters: [],
     bowlers: [],
     rawId,
-    time: matchInfo.startDate ? new Date(Number(matchInfo.startDate)).toISOString() : undefined,
-    venue: matchInfo.venueInfo?.ground || matchInfo.venueInfo?.city || '',
+    time: m.dateTimeGMT || (m.date ? new Date(m.date).toISOString() : undefined),
+    venue: m.venue || '',
   };
 }
 
+// Keep old name as alias (nothing imports it, but cheap compat).
 export function flattenCricbuzz(data) {
-  const out = [];
-  const typeMatches = data?.typeMatches || data?.type_matches || [];
-  for (const tm of typeMatches) {
-    for (const series of tm.seriesMatches || tm.series_matches || []) {
-      const list = series.seriesMatches || series.series_matches || [];
-      for (const m of list) {
-        if (m?.matchInfo?.matchId) out.push(m);
-      }
-    }
-  }
-  // some responses return a flat list instead
-  if (!out.length && Array.isArray(data?.matches)) {
-    for (const m of data.matches) if (m?.matchInfo?.matchId || m?.matchId) out.push(m.matchInfo ? m : { matchInfo: m, matchScore: {} });
-  }
-  return out;
+  return flattenCricData(data);
+}
+
+export function flattenCricData(data) {
+  if (Array.isArray(data)) return data.filter((m) => m?.id);
+  const list = data?.data;
+  if (Array.isArray(list)) return list.filter((m) => m?.id);
+  if (list && typeof list === 'object' && list.id) return [list];
+  if (Array.isArray(data?.matches)) return data.matches.filter((m) => m?.id);
+  return [];
 }
 
 function friendlyCricketError(e) {
@@ -99,12 +135,12 @@ export async function fetchCricketLive() {
   const cacheKey = 'live-cache-cricket';
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-    if (cached && Date.now() - cached.ts < 90 * 1000 && cached.matches?.length) {
+    if (cached && Date.now() - cached.ts < 120 * 1000 && cached.matches?.length) {
       return { matches: cached.matches, cached: true };
     }
   } catch { /* ignore */ }
 
-  // proxy-only: RapidAPI key must never touch the browser
+  // proxy-only: CricketData key must never touch the browser
   let res;
   try {
     res = await fetch('/api/cricket/live');
@@ -112,23 +148,27 @@ export async function fetchCricketLive() {
   } catch (e) {
     throw friendlyCricketError(e);
   }
-  if (!res) throw new Error('Add VITE_RAPIDAPI_KEY in Vercel env vars for live — showing mock');
+  if (!res) throw new Error('Add VITE_CRICKETDATA_KEY in Vercel env vars for live — showing mock');
   if (res.status === 429) throw new Error('Cricket quota hit — showing mock');
-  if (res.status === 401 || res.status === 403) throw new Error('Cricket key rejected (401/403) — check RapidAPI key — showing mock');
-  if (res.status === 500) throw new Error('Add VITE_RAPIDAPI_KEY in Vercel env vars for live — showing mock');
+  if (res.status === 401 || res.status === 403) throw new Error('Cricket key rejected (401/403) — check CricketData key — showing mock');
+  if (res.status === 500) throw new Error('Add VITE_CRICKETDATA_KEY in Vercel env vars for live — showing mock');
   if (!res.ok) {
     let msg = `Cricket error ${res.status}`;
     try {
       const err = await res.clone().json();
       if (err?.error) msg = String(err.error).slice(0, 160);
+      else if (err?.reason) msg = String(err.reason).slice(0, 160);
       else if (err?.message) msg = String(err.message).slice(0, 160);
     } catch { /* keep default */ }
     throw new Error(msg);
   }
   const data = await res.json();
-  const flat = flattenCricbuzz(data);
-  const live = flat.filter((m) => /in.?progress|^live/i.test(m.matchInfo?.state || ''));
-  const matches = (live.length ? live : flat).slice(0, 15).map((m) => mapCricbuzz(m.matchInfo, m.matchScore));
+  if (data?.status === 'failure') {
+    throw new Error(data?.reason ? String(data.reason).slice(0, 160) : 'Cricket API failure — showing mock');
+  }
+  const flat = flattenCricData(data);
+  const live = flat.filter(isLiveMatch);
+  const matches = (live.length ? live : flat).slice(0, 15).map(mapCricData);
 
   try {
     localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), matches }));
@@ -136,7 +176,9 @@ export async function fetchCricketLive() {
   return { matches, cached: false };
 }
 
-// Full scoreboard: normalized { matchHeader, innings[], commentary[] }
+// Full scoreboard: normalized { matchHeader, innings[], commentary[], score[] }
+// NOTE: free match_info has no ball-by-ball/batsmen/bowlers tables —
+// innings[] + score[] are derived from the per-inning score array.
 export async function fetchCricketDetail(matchId) {
   const rawId = String(matchId).replace(/^cr-/, '');
   let res;
@@ -151,54 +193,47 @@ export async function fetchCricketDetail(matchId) {
   return normalizeDetail(data);
 }
 
-function asArray(v) {
-  if (Array.isArray(v)) return v;
-  if (v && typeof v === 'object') return Object.values(v);
-  return [];
-}
-
 export function normalizeDetail(data) {
-  const scard = data?.scorecard || data;
-  const comm = data?.commentary || null;
-  const rawCards = scard?.scoreCard ?? scard?.scorecard ?? [];
-  const scoreCards = Array.isArray(rawCards) ? rawCards : rawCards ? [rawCards] : [];
-  const matchHeader = scard?.matchHeader || scard?.matchHeaders || comm?.matchHeader || {};
-  const innings = scoreCards.map((s) => {
-    const bat = s.batTeamDetails || {};
-    const bowl = s.bowlTeamDetails || {};
-    const sd = s.scoreDetails || {};
-    // NOTE: upstream nests player tables inside the team blocks
-    // (batTeamDetails.batsmenData / bowlTeamDetails.bowlersData),
-    // with legacy top-level s.batsmenData / s.bowlersData as fallback.
-    // Preserve API order (batting order) — do not re-sort batsmen.
-    const batsmen = asArray(s.batsmenData ?? bat.batsmenData)
-      .filter((b) => b && (b.batName || b.name))
-      .map((b) => ({ name: b.batName || b.name, runs: b.runs ?? 0, balls: b.balls ?? 0, fours: b.fours ?? 0, sixes: b.sixes ?? 0, out: b.outDesc || b.out || 'not out' }))
-      .slice(0, 11);
-    const bowlers = asArray(s.bowlersData ?? bowl.bowlersData)
-      .filter((b) => b && (b.bowlName || b.name))
-      .map((b) => ({ name: b.bowlName || b.name, overs: b.overs ?? 0, runs: b.runs ?? 0, wickets: b.wickets ?? 0, economy: b.economy ?? '' }))
-      .sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)
-      .slice(0, 8);
+  const m = data?.data || data || {};
+  const scores = Array.isArray(m.score) ? m.score : [];
+  const matchHeader = {
+    status: m.status || '',
+    name: m.name || '',
+    matchType: m.matchType || '',
+    venue: m.venue || '',
+    date: m.date || m.dateTimeGMT || '',
+  };
+  // Group per-inning entries by team, preserving API order.
+  const byTeam = [];
+  const seen = new Map();
+  for (const s of scores) {
+    if (!s || (!s.team && !s.inning)) continue;
+    const key = teamOfEntry(s) || 'Unknown';
+    if (!seen.has(key)) {
+      seen.set(key, byTeam.length);
+      byTeam.push({ team: key, entries: [] });
+    }
+    byTeam[seen.get(key)].entries.push(s);
+  }
+  const innings = byTeam.map((g) => {
+    const last = g.entries[g.entries.length - 1] || {};
     return {
-      teamName: bat.batTeamName || '',
-      teamShort: bat.batTeamShort || '',
-      runs: sd.runs ?? 0,
-      wickets: sd.wickets ?? 0,
-      overs: sd.overs ?? 0,
-      runRate: sd.runRate ?? '',
-      batsmen,
-      bowlers,
+      teamName: g.team,
+      teamShort: shortOf(g.team),
+      runs: last.r ?? 0,
+      wickets: last.w ?? 0,
+      overs: last.o ?? 0,
+      runRate: '',
+      batsmen: [],
+      bowlers: [],
     };
   });
-  const rawList = comm?.commentaryList || comm?.commentary_list || scard?.commentaryList || [];
-  const commentary = rawList
-    .filter((c) => c && (c.commText || c.commentary || c.text))
-    .slice(0, 12)
-    .map((c) => ({
-      over: c.overNumber != null ? `${c.overNumber}` : c.over ? String(c.over) : '',
-      text: String(c.commText || c.commentary || c.text || '').replace(/<[^>]*>/g, '').slice(0, 280),
-      timestamp: c.timestamp || '',
-    }));
-  return { matchHeader, innings, commentary, raw: data };
+  // legacy compat for Boards.jsx `d.score` block
+  const score = scores.map((s) => ({
+    inning: s.inning || `${s.team}`,
+    r: s.r ?? 0,
+    w: s.w ?? 0,
+    o: s.o ?? 0,
+  }));
+  return { matchHeader, innings, commentary: [], score, raw: data };
 }

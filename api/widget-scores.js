@@ -14,20 +14,13 @@ function footballKey() {
   );
 }
 
-function rapidKey() {
+function cricketKey() {
   return (
-    process.env.VITE_RAPIDAPI_KEY ||
-    process.env.RAPIDAPI_KEY ||
-    process.env.VITE_RAPIDAPI_CRICKET_KEY ||
+    process.env.VITE_CRICKETDATA_KEY ||
+    process.env.CRICKETDATA_KEY ||
+    process.env.VITE_CRICKETDATA_API_KEY ||
+    process.env.CRICAPI_KEY ||
     ''
-  );
-}
-
-function rapidHost() {
-  return (
-    process.env.VITE_RAPIDAPI_CRICKET_HOST ||
-    process.env.RAPIDAPI_CRICKET_HOST ||
-    'cricbuzz-cricket.p.rapidapi.com'
   );
 }
 
@@ -62,50 +55,53 @@ async function topFootballLive(key) {
   }
 }
 
-function flattenTypeMatches(data) {
-  const out = [];
-  for (const tm of data?.typeMatches || []) {
-    for (const series of tm.seriesMatches || []) {
-      for (const m of series.seriesMatches || []) {
-        if (m?.matchInfo?.matchId) out.push(m);
-      }
-    }
-  }
-  return out;
+function entryBelongsTo(s, team) {
+  if (!s || !team) return false;
+  if (s.team) return String(s.team).toLowerCase() === String(team).toLowerCase();
+  // CricAPI shape: { inning: "India Innings 1", r, w, o } — no `team` field
+  const inning = String(s.inning || '').toLowerCase();
+  return inning.startsWith(String(team).toLowerCase());
 }
 
-function fmtSide(side) {
-  const i = side?.inngs1;
-  if (!i) return 'Yet to bat';
-  return `${i.runs ?? 0}/${i.wickets ?? 0}`;
+function fmtScoreEntry(s) {
+  if (s == null) return 'Yet to bat';
+  return `${s.r ?? 0}/${s.w ?? 0}`;
 }
 
-async function topCricketLive(key, host) {
+async function topCricketLive(key) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 8000);
   try {
-    const r = await fetch(`https://${host}/matches/v1/live`, {
-      headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },
-      signal: ctl.signal,
-    });
+    const r = await fetch(
+      `https://api.cricapi.com/v1/currentMatches?apikey=${encodeURIComponent(key)}&offset=0`,
+      { signal: ctl.signal }
+    );
     if (!r.ok) return null;
     const data = await r.json();
-    const list = flattenTypeMatches(data);
-    const m = list.find((x) => /in.?progress|^live/i.test(x.matchInfo?.state || '')) || list[0];
+    const list = Array.isArray(data?.data) ? data.data : [];
+    if (!list.length) return null;
+    const isDone = (status) => /won|draw|tie|result|no result|abandoned|cancelled/i.test(status || '');
+    const isLive = (m) =>
+      !isDone(m?.status) &&
+      ((Array.isArray(m?.score) && m.score.length > 0) ||
+        /live|innings|break|trail|lead|need|day \d|session|stumps|playing/i.test(m?.status || ''));
+    const m = list.find(isLive) || list[0];
     if (!m) return null;
-    const info = m.matchInfo || {};
-    const score = m.matchScore || {};
-    const live = /in.?progress|^live/i.test(info.state || '');
-    const t1 = info.team1 || {};
-    const t2 = info.team2 || {};
+    const teams = m.teams || [];
+    const scores = Array.isArray(m.score) ? m.score : [];
+    const scoreFor = (team) => scores.filter((s) => entryBelongsTo(s, team)).map(fmtScoreEntry).join(' & ') || 'Yet to bat';
+    const t1 = teams[0] || 'Team A';
+    const t2 = teams[1] || 'Team B';
+    const live = isLive(m);
+    const shortOf = (n) => String(n).slice(0, 3).toUpperCase();
     return {
       sport: 'cricket',
-      league: info.seriesName || 'Cricket',
-      teamA: `${t1.teamSName || (t1.teamName || 'A').slice(0, 3).toUpperCase()} ${fmtSide(score.team1Score)}`.trim(),
-      teamB: `${t2.teamSName || (t2.teamName || 'B').slice(0, 3).toUpperCase()} ${fmtSide(score.team2Score)}`.trim(),
-      minute: live ? 'LIVE' : info.status || info.state || '',
-      status: live ? 'live' : 'scheduled',
-      deepLink: `/?view=scores&sport=cricket&match=cr-${info.matchId}`,
+      league: m.matchType ? `${String(m.matchType).toUpperCase()} • ${m.name || 'Cricket'}` : m.name || 'Cricket',
+      teamA: `${shortOf(t1)} ${scoreFor(t1)}`.trim(),
+      teamB: `${shortOf(t2)} ${scoreFor(t2)}`.trim(),
+      minute: live ? 'LIVE' : m.status || '',
+      status: live ? 'live' : isDone(m.status) ? 'ft' : 'scheduled',
+      deepLink: `/?view=scores&sport=cricket&match=cr-${m.id}`,
     };
   } catch {
     return null;
@@ -121,12 +117,11 @@ export default async function handler(req, res) {
 
   const want = String(req.query?.sport || 'auto').toLowerCase();
   const fbKey = footballKey();
-  const crKey = rapidKey();
-  const crHost = rapidHost();
+  const crKey = cricketKey();
 
   const jobs = [];
   if ((want === 'auto' || want === 'football') && fbKey) jobs.push(topFootballLive(fbKey));
-  if ((want === 'auto' || want === 'cricket') && crKey) jobs.push(topCricketLive(crKey, crHost));
+  if ((want === 'auto' || want === 'cricket') && crKey) jobs.push(topCricketLive(crKey));
 
   if (!jobs.length) {
     return res.status(500).json({
@@ -134,7 +129,7 @@ export default async function handler(req, res) {
       source: 'none',
       match: null,
       updatedAt: new Date().toISOString(),
-      error: 'Server missing keys. Add VITE_FOOTBALL / VITE_RAPIDAPI_KEY in Vercel env vars, then redeploy.',
+      error: 'Server missing keys. Add VITE_FOOTBALL / VITE_CRICKETDATA_KEY in Vercel env vars, then redeploy.',
     });
   }
 

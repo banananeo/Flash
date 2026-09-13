@@ -124,7 +124,7 @@ export function CricketBoard({ match, detail }) {
           ))}
         </div>
       )}
-      {/* RapidAPI Cricbuzz scorecard */}
+      {/* CricketData.org scorecard */}
       {innings.map((inn, i) => (
         <div key={i} className="border-[3px] border-black bg-white p-3 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone">
           <p className="font-black text-sm uppercase">

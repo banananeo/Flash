@@ -58,12 +58,12 @@ function articleDevMiddleware() {
   }
 }
 
-// Dev-only parity for Vercel's api/cricket.js detail route: the Vite proxy
-// can only forward to ONE upstream path, but prod merges hscard + hcomm
-// into { scorecard, commentary }. This middleware does the same merge on
-// localhost so commentary shows in dev too. Plugin middlewares run before
-// the proxy, so '/api/cricket/detail' never reaches the generic rewrite.
-function cricketDetailDevMiddleware(rapidKey, rapidHost) {
+// Dev-only parity for Vercel's api/cricket.js detail route: prod serves
+// api.cricapi.com match_info through /api/cricket/detail. This middleware
+// does the same on localhost so the scoreboard shows in dev too.
+// Plugin middlewares run before the proxy, so '/api/cricket/detail' never
+// reaches the generic rewrite.
+function cricketDetailDevMiddleware(cricKey) {
   return {
     name: 'cricket-detail-dev-middleware',
     configureServer(server) {
@@ -77,33 +77,29 @@ function cricketDetailDevMiddleware(rapidKey, rapidHost) {
           const u = new URL(req.url, 'http://localhost')
           const rawId = String(u.searchParams.get('id') || u.searchParams.get('matchId') || '').replace(/^cr-/, '')
           if (!rawId) {
-            send(400, { error: 'Missing ?id= matchId' })
+            send(400, { error: 'Missing ?id= match id' })
             return
           }
-          const headers = {}
-          if (rapidKey) headers['x-rapidapi-key'] = rapidKey
-          if (rapidHost) headers['x-rapidapi-host'] = rapidHost
+          if (!cricKey) {
+            send(500, { error: 'Server missing CricketData key. Set VITE_CRICKETDATA_KEY in .env' })
+            return
+          }
           const ctl = new AbortController()
           const t = setTimeout(() => ctl.abort(), 10000)
-          let scardRes, commRes
+          let upstream
           try {
-            ;[scardRes, commRes] = await Promise.all([
-              fetch(`https://${rapidHost}/mcenter/v1/${rawId}/hscard`, { headers, signal: ctl.signal }),
-              fetch(`https://${rapidHost}/mcenter/v1/${rawId}/hcomm`, { headers, signal: ctl.signal }),
-            ])
+            upstream = await fetch(
+              `https://api.cricapi.com/v1/match_info?apikey=${encodeURIComponent(cricKey)}&id=${encodeURIComponent(rawId)}`,
+              { signal: ctl.signal }
+            )
           } finally {
             clearTimeout(t)
           }
-          const scardJson = await scardRes.json().catch(() => null)
-          const commJson = await commRes.json().catch(() => null)
-          if (!scardRes.ok && !commRes.ok) {
-            send(scardRes.status !== 200 ? scardRes.status : commRes.status, {
-              error: `Cricket detail error ${scardRes.status}`,
-            })
-            return
-          }
+          const body = await upstream.text()
           res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30')
-          send(200, { scorecard: scardJson, commentary: commJson })
+          res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json')
+          res.statusCode = upstream.status
+          res.end(body)
         } catch (e) {
           send(502, { error: e.message || 'Cricket detail failed' })
         }
@@ -116,14 +112,13 @@ function cricketDetailDevMiddleware(rapidKey, rapidHost) {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const footballKey = env.VITE_FOOTBALL || env.VITE_FOOTBALL_API_KEY || process.env.VITE_FOOTBALL || process.env.VITE_FOOTBALL_API_KEY || ''
-  const rapidKey = env.VITE_RAPIDAPI_KEY || env.RAPIDAPI_KEY || process.env.VITE_RAPIDAPI_KEY || process.env.RAPIDAPI_KEY || ''
-  const rapidHost = env.VITE_RAPIDAPI_CRICKET_HOST || process.env.VITE_RAPIDAPI_CRICKET_HOST || 'cricbuzz-cricket.p.rapidapi.com'
+  const cricKey = env.VITE_CRICKETDATA_KEY || env.CRICKETDATA_KEY || process.env.VITE_CRICKETDATA_KEY || process.env.CRICKETDATA_KEY || ''
   const gnewsKey = env.VITE_GNEWS || process.env.VITE_GNEWS || ''
   return {
   plugins: [
     react(),
     articleDevMiddleware(),
-    cricketDetailDevMiddleware(rapidKey, rapidHost),
+    cricketDetailDevMiddleware(cricKey),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'logo.svg', 'apple-touch-icon.png', 'apple-splash-1170x2532.png', 'apple-splash-1290x2796.png', 'apple-splash-2048x2732.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512.png'],
@@ -157,9 +152,9 @@ export default defineConfig(({ mode }) => {
             options: { cacheName: 'gnews', expiration: { maxEntries: 30, maxAgeSeconds: 600 } },
           },
           {
-            urlPattern: /^https:\/\/cricbuzz-cricket\.p\.rapidapi\.com\/.*/i,
+            urlPattern: /^https:\/\/api\.cricapi\.com\/.*/i,
             handler: 'NetworkFirst',
-            options: { cacheName: 'cricbuzz-rapidapi', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
+            options: { cacheName: 'cricketdata', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
           },
           {
             urlPattern: /^https:\/\/v3\.football\.api-sports\.io\/.*/i,
@@ -204,32 +199,34 @@ export default defineConfig(({ mode }) => {
           })
         },
       },
-      // Cricket (RapidAPI Cricbuzz): client calls /api/cricket/live + /api/cricket/detail?id= — key injected server-side
+      // Cricket (CricketData.org): client calls /api/cricket/live + /api/cricket/detail?id= — key injected server-side
       '/api/cricket': {
-        target: 'https://cricbuzz-cricket.p.rapidapi.com',
+        target: 'https://api.cricapi.com',
         changeOrigin: true,
         rewrite: (p) => {
           const u = new URL(p, 'http://localhost')
           const pathname = u.pathname.replace(/^\/api\/cricket/, '') || '/live'
           const params = new URLSearchParams(u.search)
-          // legacy compat
-          if (pathname === '/cricScore') return `/matches/v1/live${u.search || ''}`
-          if (pathname === '/match_info') {
-            const id = String(params.get('id') || '').replace(/^cr-/, '')
-            return `/mcenter/v1/${id}/hscard`
+          // legacy compat (old RapidAPI/Cricbuzz routes)
+          if (pathname === '/cricScore') {
+            params.set('apikey', cricKey)
+            if (!params.get('offset')) params.set('offset', '0')
+            return `/v1/currentMatches?${params}`
           }
-          if (pathname === '/live') return `/matches/v1/live${u.search || ''}`
+          if (pathname === '/match_info') {
+            const id = String(params.get('id') || params.get('matchId') || '').replace(/^cr-/, '')
+            return `/v1/match_info?apikey=${encodeURIComponent(cricKey)}&id=${encodeURIComponent(id)}`
+          }
+          if (pathname === '/live' || pathname === '/') {
+            params.set('apikey', cricKey)
+            if (!params.get('offset')) params.set('offset', '0')
+            return `/v1/currentMatches?${params}`
+          }
           if (pathname === '/detail') {
             const id = String(params.get('id') || params.get('matchId') || '').replace(/^cr-/, '')
-            return `/mcenter/v1/${id}/hscard`
+            return `/v1/match_info?apikey=${encodeURIComponent(cricKey)}&id=${encodeURIComponent(id)}`
           }
           return pathname + (u.search || '')
-        },
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq) => {
-            if (rapidKey) proxyReq.setHeader('x-rapidapi-key', rapidKey)
-            if (rapidHost) proxyReq.setHeader('x-rapidapi-host', rapidHost)
-          })
         },
       },
       '/api': {
