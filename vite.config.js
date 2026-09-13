@@ -58,16 +58,72 @@ function articleDevMiddleware() {
   }
 }
 
+// Dev-only parity for Vercel's api/cricket.js detail route: the Vite proxy
+// can only forward to ONE upstream path, but prod merges hscard + hcomm
+// into { scorecard, commentary }. This middleware does the same merge on
+// localhost so commentary shows in dev too. Plugin middlewares run before
+// the proxy, so '/api/cricket/detail' never reaches the generic rewrite.
+function cricketDetailDevMiddleware(rapidKey, rapidHost) {
+  return {
+    name: 'cricket-detail-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/cricket/detail', async (req, res) => {
+        const send = (status, obj) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(obj))
+        }
+        try {
+          const u = new URL(req.url, 'http://localhost')
+          const rawId = String(u.searchParams.get('id') || u.searchParams.get('matchId') || '').replace(/^cr-/, '')
+          if (!rawId) {
+            send(400, { error: 'Missing ?id= matchId' })
+            return
+          }
+          const headers = {}
+          if (rapidKey) headers['x-rapidapi-key'] = rapidKey
+          if (rapidHost) headers['x-rapidapi-host'] = rapidHost
+          const ctl = new AbortController()
+          const t = setTimeout(() => ctl.abort(), 10000)
+          let scardRes, commRes
+          try {
+            ;[scardRes, commRes] = await Promise.all([
+              fetch(`https://${rapidHost}/mcenter/v1/${rawId}/hscard`, { headers, signal: ctl.signal }),
+              fetch(`https://${rapidHost}/mcenter/v1/${rawId}/hcomm`, { headers, signal: ctl.signal }),
+            ])
+          } finally {
+            clearTimeout(t)
+          }
+          const scardJson = await scardRes.json().catch(() => null)
+          const commJson = await commRes.json().catch(() => null)
+          if (!scardRes.ok && !commRes.ok) {
+            send(scardRes.status !== 200 ? scardRes.status : commRes.status, {
+              error: `Cricket detail error ${scardRes.status}`,
+            })
+            return
+          }
+          res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30')
+          send(200, { scorecard: scardJson, commentary: commJson })
+        } catch (e) {
+          send(502, { error: e.message || 'Cricket detail failed' })
+        }
+      })
+    },
+  }
+}
+
 // PWA = installable + home-screen icon. Proxies keep API keys off the client in dev.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const footballKey = env.VITE_FOOTBALL || env.VITE_FOOTBALL_API_KEY || process.env.VITE_FOOTBALL || process.env.VITE_FOOTBALL_API_KEY || ''
-  const cricKey = env.VITE_CRICAPI || env.VITE_CRICAPI_KEY || process.env.VITE_CRICAPI || process.env.VITE_CRICAPI_KEY || ''
+  const rapidKey = env.VITE_RAPIDAPI_KEY || env.RAPIDAPI_KEY || process.env.VITE_RAPIDAPI_KEY || process.env.RAPIDAPI_KEY || ''
+  const rapidHost = env.VITE_RAPIDAPI_CRICKET_HOST || process.env.VITE_RAPIDAPI_CRICKET_HOST || 'cricbuzz-cricket.p.rapidapi.com'
   const gnewsKey = env.VITE_GNEWS || process.env.VITE_GNEWS || ''
   return {
   plugins: [
     react(),
     articleDevMiddleware(),
+    cricketDetailDevMiddleware(rapidKey, rapidHost),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'logo.svg', 'apple-touch-icon.png', 'apple-splash-1170x2532.png', 'apple-splash-1290x2796.png', 'apple-splash-2048x2732.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-maskable-512.png'],
@@ -101,9 +157,9 @@ export default defineConfig(({ mode }) => {
             options: { cacheName: 'gnews', expiration: { maxEntries: 30, maxAgeSeconds: 600 } },
           },
           {
-            urlPattern: /^https:\/\/api\.cricapi\.com\/.*/i,
+            urlPattern: /^https:\/\/cricbuzz-cricket\.p\.rapidapi\.com\/.*/i,
             handler: 'NetworkFirst',
-            options: { cacheName: 'cricapi', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
+            options: { cacheName: 'cricbuzz-rapidapi', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
           },
           {
             urlPattern: /^https:\/\/v3\.football\.api-sports\.io\/.*/i,
@@ -148,17 +204,32 @@ export default defineConfig(({ mode }) => {
           })
         },
       },
-      // Cricket: client calls /api/cricket/cricScore — apikey injected server-side
+      // Cricket (RapidAPI Cricbuzz): client calls /api/cricket/live + /api/cricket/detail?id= — key injected server-side
       '/api/cricket': {
-        target: 'https://api.cricapi.com',
+        target: 'https://cricbuzz-cricket.p.rapidapi.com',
         changeOrigin: true,
         rewrite: (p) => {
-          let path = p.replace(/^\/api\/cricket/, '/v1')
-          // inject apikey if client didn't send one
-          if (cricKey && !/apikey=/i.test(path)) {
-            path += (path.includes('?') ? '&' : '?') + `apikey=${cricKey}`
+          const u = new URL(p, 'http://localhost')
+          const pathname = u.pathname.replace(/^\/api\/cricket/, '') || '/live'
+          const params = new URLSearchParams(u.search)
+          // legacy compat
+          if (pathname === '/cricScore') return `/matches/v1/live${u.search || ''}`
+          if (pathname === '/match_info') {
+            const id = String(params.get('id') || '').replace(/^cr-/, '')
+            return `/mcenter/v1/${id}/hscard`
           }
-          return path
+          if (pathname === '/live') return `/matches/v1/live${u.search || ''}`
+          if (pathname === '/detail') {
+            const id = String(params.get('id') || params.get('matchId') || '').replace(/^cr-/, '')
+            return `/mcenter/v1/${id}/hscard`
+          }
+          return pathname + (u.search || '')
+        },
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            if (rapidKey) proxyReq.setHeader('x-rapidapi-key', rapidKey)
+            if (rapidHost) proxyReq.setHeader('x-rapidapi-host', rapidHost)
+          })
         },
       },
       '/api': {

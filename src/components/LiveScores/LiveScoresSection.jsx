@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RefreshCw, Trophy } from 'lucide-react'
 import MatchCard from './MatchCard'
-import { useScoreStore } from '../../store/useScoreStore'
+import ScoreFilters from './ScoreFilters'
+import { useScoreStore, isFavMatch, normalizeTeam } from '../../store/useScoreStore'
 
 const TABS = [
   { id: 'football', label: '⚽ Football', bg: '#00D9A5' },
@@ -20,10 +21,25 @@ export default function LiveScoresSection() {
   const source = useScoreStore((s) => s.source)
   const fetchScores = useScoreStore((s) => s.fetchScores)
   const liveCount = useScoreStore((s) => s.liveCount)()
+  const favTeams = useScoreStore((s) => s.favTeams)
+  const toggleFav = useScoreStore((s) => s.toggleFav)
+  const getVisibleMatches = useScoreStore((s) => s.getVisibleMatches)
 
-  const matches = sport === 'football' ? football : cricket
-  const liveMatches = matches.filter((m) => m.status === 'live')
-  const doneMatches = matches.filter((m) => m.status !== 'live')
+  const { matches, total, filteredCount, favMiss } = getVisibleMatches(sport)
+  // star removes the already-favourited side, otherwise pins teamA
+  const toggleMatchFav = (m) => {
+    const favSet = new Set((favTeams || []).map(normalizeTeam))
+    if (favSet.has(normalizeTeam(m?.teamA?.name))) toggleFav(m.teamA.name)
+    else if (favSet.has(normalizeTeam(m?.teamB?.name))) toggleFav(m.teamB.name)
+    else toggleFav(m?.teamA?.name)
+  }
+  const favMatches = favTeams?.length ? matches.filter((m) => isFavMatch(m, favTeams)) : []
+  const otherMatches = favTeams?.length ? matches.filter((m) => !isFavMatch(m, favTeams)) : matches
+  const liveFavs = favMatches.filter((m) => m.status === 'live')
+  const doneFavs = favMatches.filter((m) => m.status !== 'live')
+  const liveOthers = otherMatches.filter((m) => m.status === 'live')
+  const doneOthers = otherMatches.filter((m) => m.status !== 'live')
+  const showCount = `Showing ${filteredCount} of ${total}`
 
   // fetch on mount + 60s poll (cached 90s inside lib to protect quotas)
   useEffect(() => {
@@ -100,10 +116,18 @@ export default function LiveScoresSection() {
             <button onClick={() => fetchScores(sport)} className="shrink-0 border-2 border-black bg-white px-2 py-0.5 text-black dark:border-bone dark:bg-surface dark:text-bone">RETRY</button>
           </div>
         )}
+
+        <ScoreFilters sport={sport} />
+        <p className="mt-2 font-mono text-[10px] font-bold uppercase text-black/50 dark:text-bone/50">{showCount}</p>
       </div>
 
       {/* vertical mobile-perfect list */}
       <div className="mt-3 flex flex-col gap-2.5">
+        {favMiss && (
+          <div className="border-[3px] border-dashed border-black bg-white px-3 py-2 text-xs font-black uppercase dark:border-bone dark:bg-raised dark:text-bone">
+            No favourite-team matches right now — showing other scores
+          </div>
+        )}
         <AnimatePresence mode="popLayout">
           {status === 'loading' && !matches.length ? (
             [0, 1, 2, 3].map((i) => (
@@ -114,17 +138,42 @@ export default function LiveScoresSection() {
             ))
           ) : (
             <>
-              {liveMatches.length > 0 && (
-                <p className="badge-brutal w-fit bg-brutal-mint">● Live ({liveMatches.length})</p>
+              {favMatches.length > 0 && (
+                <p className="badge-brutal w-fit bg-brutal-yellow">★ YOUR TEAMS ({favMatches.length})</p>
               )}
-              {liveMatches.map((m, i) => <MatchCard key={m.id} match={m} index={i} />)}
-              {doneMatches.length > 0 && (
-                <p className="badge-brutal mt-1 w-fit bg-black text-white dark:border-bone">Finished / Scheduled ({doneMatches.length})</p>
+              {liveFavs.map((m, i) => (
+                <MatchCard key={m.id} match={m} index={i} isFav onToggleFav={() => toggleMatchFav(m)} />
+              ))}
+              {doneFavs.map((m, i) => (
+                <MatchCard key={m.id} match={m} index={i} isFav onToggleFav={() => toggleMatchFav(m)} />
+              ))}
+              {liveOthers.length > 0 && (
+                <p className="badge-brutal w-fit bg-brutal-mint">● Live ({liveOthers.length})</p>
               )}
-              {doneMatches.map((m, i) => <MatchCard key={m.id} match={m} index={i} />)}
+              {liveOthers.map((m, i) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  index={i}
+                  isFav={isFavMatch(m, favTeams)}
+                  onToggleFav={() => toggleMatchFav(m)}
+                />
+              ))}
+              {doneOthers.length > 0 && (
+                <p className="badge-brutal mt-1 w-fit bg-black text-white dark:border-bone">Finished / Scheduled ({doneOthers.length})</p>
+              )}
+              {doneOthers.map((m, i) => (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  index={i}
+                  isFav={isFavMatch(m, favTeams)}
+                  onToggleFav={() => toggleMatchFav(m)}
+                />
+              ))}
               {!matches.length && (
                 <div className="card-brutal bg-brutal-yellow p-6 text-center font-black text-black dark:border-bone">
-                  NO MATCHES — CHECK BACK SOON
+                  NO MATCHES FOR THESE FILTERS — RESET TO SEE ALL
                 </div>
               )}
             </>

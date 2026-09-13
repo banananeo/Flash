@@ -13,6 +13,93 @@ const initialView = (() => {
   return 'news'
 })()
 
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const v = JSON.parse(raw)
+    return v ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch { /* ignore */ }
+}
+
+export const normalizeTeam = (name) => String(name || '').trim().toLowerCase()
+
+export function isFavMatch(match, favTeams) {
+  if (!favTeams?.length) return false
+  const set = new Set(favTeams.map(normalizeTeam))
+  return set.has(normalizeTeam(match?.teamA?.name)) || set.has(normalizeTeam(match?.teamB?.name))
+}
+
+function matchLeague(m) {
+  return m.leagueName || String(m.league || '').split('•')[0].trim() || 'Other'
+}
+
+export function applyFilters(matches, filter, sport) {
+  const league = filter?.league || 'All'
+  const country = filter?.country || 'All'
+  return (matches || []).filter((m) => {
+    if (league !== 'All' && matchLeague(m) !== league) return false
+    if (country !== 'All') {
+      if (sport === 'football') {
+        if ((m.country || '') !== country) return false
+      } else {
+        // cricket series carry no league-country → match team names
+        const c = country.toLowerCase()
+        if (normalizeTeam(m.teamA?.name) !== c && normalizeTeam(m.teamB?.name) !== c) return false
+      }
+    }
+    return true
+  })
+}
+
+export function sortByFavs(matches, favTeams) {
+  if (!favTeams?.length) {
+    return {
+      sorted: [...(matches || [])].sort((a, b) => (a.status === 'live' ? 0 : 1) - (b.status === 'live' ? 0 : 1)),
+      favMiss: false,
+    }
+  }
+  const favs = []
+  const rest = []
+  for (const m of matches || []) (isFavMatch(m, favTeams) ? favs : rest).push(m)
+  const byLive = (a, b) => (a.status === 'live' ? 0 : 1) - (b.status === 'live' ? 0 : 1)
+  favs.sort(byLive)
+  rest.sort(byLive)
+  return { sorted: [...favs, ...rest], favMiss: favs.length === 0 }
+}
+
+export function getFilterOptions(matches, sport) {
+  const leagues = new Set()
+  const countries = new Set()
+  const teams = new Set()
+  for (const m of matches || []) {
+    leagues.add(matchLeague(m))
+    if (sport === 'football') {
+      if (m.country) countries.add(m.country)
+    } else {
+      if (m.teamA?.name) countries.add(m.teamA.name)
+      if (m.teamB?.name) countries.add(m.teamB.name)
+    }
+    if (m.teamA?.name) teams.add(m.teamA.name)
+    if (m.teamB?.name) teams.add(m.teamB.name)
+  }
+  const sort = (s) => [...s].sort((a, b) => a.localeCompare(b))
+  return { leagues: sort(leagues), countries: sort(countries), teams: sort(teams) }
+}
+
+const DEFAULT_FILTERS = {
+  football: { league: 'All', country: 'All' },
+  cricket: { league: 'All', country: 'All' },
+}
+
 export const useScoreStore = create((set, get) => ({
   view: initialView,
   setView: (view) => {
@@ -39,6 +126,54 @@ export const useScoreStore = create((set, get) => ({
   error: null,
   selected: null, // match object for modal scoreboard
   source: { football: 'mock', cricket: 'mock' },
+
+  // ---- favorites + filters (persisted) ----
+  favTeams: loadJSON('flash-favs-v1', []),
+  filters: loadJSON('flash-filters-v1', DEFAULT_FILTERS),
+
+  toggleFav: (teamName) => {
+    const norm = normalizeTeam(teamName)
+    if (!norm) return
+    const current = get().favTeams || []
+    const exists = current.some((t) => normalizeTeam(t) === norm)
+    // store display-case version, dedupe case-insensitively
+    const next = exists
+      ? current.filter((t) => normalizeTeam(t) !== norm)
+      : [...current, String(teamName).trim()]
+    set({ favTeams: next })
+    saveJSON('flash-favs-v1', next)
+  },
+
+  clearFavs: () => {
+    set({ favTeams: [] })
+    saveJSON('flash-favs-v1', [])
+  },
+
+  setFilter: (sport, key, value) => {
+    const next = {
+      ...get().filters,
+      [sport]: { ...(get().filters?.[sport] || { league: 'All', country: 'All' }), [key]: value },
+    }
+    set({ filters: next })
+    saveJSON('flash-filters-v1', next)
+  },
+
+  clearFilters: (sport) => {
+    const next = { ...get().filters, [sport]: { league: 'All', country: 'All' } }
+    set({ filters: next })
+    saveJSON('flash-filters-v1', next)
+  },
+
+  getFilterOptionsFor: (sport) => getFilterOptions(get()[sport] || [], sport),
+
+  getVisibleMatches: (sport) => {
+    const s = sport ?? get().sport
+    const all = get()[s] || []
+    const filter = get().filters?.[s] || { league: 'All', country: 'All' }
+    const filtered = applyFilters(all, filter, s)
+    const { sorted, favMiss } = sortByFavs(filtered, get().favTeams)
+    return { matches: sorted, total: all.length, filteredCount: filtered.length, favMiss }
+  },
 
   setSport: (sport) => {
     set({ sport })

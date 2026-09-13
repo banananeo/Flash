@@ -23,19 +23,38 @@ function TeamLogo({ logo, short }) {
 }
 
 // Full-width row — tap opens full modal scoreboard. No like/dislike here.
-export default function MatchCard({ match, index = 0 }) {
+export default function MatchCard({ match, index = 0, isFav = false, onToggleFav }) {
   const openMatch = useScoreStore((s) => s.openMatch)
   const isLive = match.status === 'live'
 
   return (
-    <motion.button
+    <motion.div
       initial={{ y: 24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 300, damping: 26, delay: Math.min(index * 0.04, 0.3) }}
       onClick={() => openMatch(match)}
-      className="flex w-full items-center gap-3 border-[3px] border-black bg-white p-3 text-left text-black shadow-brutal-sm active:shadow-none dark:border-bone dark:bg-surface dark:text-bone"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') openMatch(match)
+      }}
+      className="flex w-full cursor-pointer items-center gap-3 border-[3px] border-black bg-white p-3 text-left text-black shadow-brutal-sm active:shadow-none dark:border-bone dark:bg-surface dark:text-bone"
     >
+      {onToggleFav && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleFav()
+          }}
+          title={isFav ? 'Remove from favorites' : 'Pin as favorite'}
+          aria-label={isFav ? 'Remove from favorites' : 'Pin as favorite'}
+          aria-pressed={!!isFav}
+          className={`grid h-8 w-8 shrink-0 place-items-center border-2 border-black text-base leading-none ${isFav ? 'bg-black text-brutal-yellow' : 'bg-brutal-cream text-black/50'}`}
+        >
+          ★
+        </button>
+      )}
       {match.sport === 'football' ? (
         <>
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -76,6 +95,6 @@ export default function MatchCard({ match, index = 0 }) {
           <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
         </>
       )}
-    </motion.button>
+    </motion.div>
   )
 }

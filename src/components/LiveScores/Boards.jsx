@@ -72,9 +72,17 @@ export function FootballBoard({ match }) {
 
 export function CricketBoard({ match, detail }) {
   const d = detail || {}
+  const innings = d.innings || []
+  const commentary = d.commentary || []
+  const headerStatus = d.matchHeader?.status || ''
   return (
     <div className="flex flex-col gap-3">
       <ScoreHero match={match} />
+      {headerStatus && headerStatus !== (match.meta?.need || '') && (
+        <p className="border-[3px] border-black bg-brutal-yellow px-3 py-1.5 text-xs font-black uppercase text-black">
+          {headerStatus}
+        </p>
+      )}
       {match.meta?.crr && (
         <div className="grid grid-cols-2 gap-2 text-center">
           <div className="border-[3px] border-black bg-brutal-mint p-2 shadow-brutal-xs">
@@ -116,11 +124,56 @@ export function CricketBoard({ match, detail }) {
           ))}
         </div>
       )}
+      {/* RapidAPI Cricbuzz scorecard */}
+      {innings.map((inn, i) => (
+        <div key={i} className="border-[3px] border-black bg-white p-3 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone">
+          <p className="font-black text-sm uppercase">
+            {inn.teamName || inn.teamShort || `Innings ${i + 1}`}{' '}
+            <span className="font-mono">{inn.runs}/{inn.wickets} ({inn.overs} ov){inn.runRate ? ` • RR ${inn.runRate}` : ''}</span>
+          </p>
+          {!!inn.batsmen?.length && (
+            <div className="mt-2">
+              <p className="font-mono text-[10px] font-bold uppercase opacity-60">Batting</p>
+              {inn.batsmen.slice(0, 6).map((b, j) => (
+                <div key={j} className="flex justify-between gap-2 border-b-2 border-dashed border-black/20 py-1 text-sm font-bold dark:border-bone/25">
+                  <span className="truncate">{b.name} <span className="font-mono text-[10px] opacity-60">{b.out}</span></span>
+                  <span className="shrink-0 font-mono">{b.runs} ({b.balls})</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {!!inn.bowlers?.length && (
+            <div className="mt-2">
+              <p className="font-mono text-[10px] font-bold uppercase opacity-60">Bowling</p>
+              {inn.bowlers.slice(0, 4).map((b, j) => (
+                <div key={j} className="flex justify-between gap-2 py-0.5 text-sm font-bold">
+                  <span className="truncate">{b.name}</span>
+                  <span className="shrink-0 font-mono">{b.overs}-{b.runs}-{b.wickets}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      {/* legacy CricAPI detail compat */}
       {d.score && (
         <div className="border-[3px] border-dashed border-black bg-brutal-cream p-3 font-mono text-xs font-bold text-black dark:border-bone dark:bg-raised dark:text-bone">
           {(d.score || []).map((s, i) => (
             <p key={i}>{s.inning}: {s.r}/{s.w} ({s.o} ov)</p>
           ))}
+        </div>
+      )}
+      {!!commentary.length && (
+        <div className="border-[3px] border-black bg-brutal-cream p-3 text-black dark:border-bone dark:bg-raised dark:text-bone">
+          <p className="font-black text-sm uppercase">Commentary</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {commentary.slice(0, 8).map((c, i) => (
+              <div key={i} className="flex gap-2 border-2 border-black/10 bg-white p-2 text-sm font-bold dark:border-bone/20 dark:bg-surface">
+                {c.over && <span className="shrink-0 border-2 border-black bg-black px-1.5 font-mono text-xs text-white dark:border-bone">{c.over}</span>}
+                <span className="line-clamp-3">{c.text}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
