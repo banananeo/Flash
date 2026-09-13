@@ -157,6 +157,11 @@ export default defineConfig(({ mode }) => {
             options: { cacheName: 'cricketdata', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
           },
           {
+            urlPattern: /\/api\/f1standings.*/i,
+            handler: 'NetworkFirst',
+            options: { cacheName: 'f1-standings', expiration: { maxEntries: 4, maxAgeSeconds: 3600 } },
+          },
+          {
             urlPattern: /^https:\/\/v3\.football\.api-sports\.io\/.*/i,
             handler: 'NetworkFirst',
             options: { cacheName: 'api-football', expiration: { maxEntries: 20, maxAgeSeconds: 120 } },
@@ -196,6 +201,30 @@ export default defineConfig(({ mode }) => {
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq) => {
             if (footballKey) proxyReq.setHeader('x-apisports-key', footballKey)
+          })
+        },
+      },
+      // F1 (Jolpica, no CORS upstream): client calls
+      // /api/f1standings?kind=drivers|constructors|schedule|results|qualifying[&round=N|last]
+      // — dev parity with api/f1standings.js
+      '/api/f1standings': {
+        target: 'https://api.jolpi.ca',
+        changeOrigin: true,
+        rewrite: (p) => {
+          const u = new URL(p, 'http://localhost')
+          const kind = u.searchParams.get('kind') || 'drivers'
+          if (kind === 'constructors') return '/ergast/f1/current/constructorstandings/'
+          if (kind === 'schedule') return '/ergast/f1/current/'
+          if (kind === 'results' || kind === 'qualifying') {
+            const round = u.searchParams.get('round') || 'last'
+            if (!/^(\d{1,2}|last)$/.test(round)) return '/ergast/f1/current/last/results/'
+            return `/ergast/f1/current/${round}/${kind}/`
+          }
+          return '/ergast/f1/current/driverstandings/'
+        },
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setHeader('Accept', 'application/json')
           })
         },
       },

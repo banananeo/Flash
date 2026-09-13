@@ -1,11 +1,15 @@
 import { motion } from 'framer-motion'
-import { Moon, Sun } from 'lucide-react'
+import { Bell, BellOff, Moon, Sun } from 'lucide-react'
 import { useThemeStore } from '../store/useThemeStore'
+import { useReminderStore } from '../store/useReminderStore'
 
 export default function Header() {
   const theme = useThemeStore((s) => s.theme)
   const toggle = useThemeStore((s) => s.toggle)
   const dark = theme === 'dark'
+  const reminderOn = useReminderStore((s) => s.enabled)
+  const setReminderOn = useReminderStore((s) => s.setEnabled)
+  const openReminder = useReminderStore((s) => s.openSettings)
 
   return (
     <header className="sticky top-0 z-40 border-b-[4px] border-black bg-brutal-cream/95 backdrop-blur dark:border-bone dark:bg-ink/95">
@@ -31,8 +35,17 @@ export default function Header() {
           />
           <p className="font-black text-3xl tracking-tighter text-black">FLASH!</p>
         </motion.div>
-        {/* balance spacer so the logo stays centered */}
-        <div className="w-[46px] shrink-0" aria-hidden />
+        {/* reminder bell — same footprint as the theme button so the logo stays centered */}
+        <motion.button
+          whileTap={{ scale: 0.88 }}
+          onClick={() => (reminderOn ? openReminder() : setReminderOn(true))}
+          title={reminderOn ? 'Morning reminder settings' : 'Turn on morning reminder'}
+          aria-label={reminderOn ? 'Morning reminder settings' : 'Turn on morning reminder'}
+          aria-pressed={!!reminderOn}
+          className={`btn-brutal grid w-[46px] shrink-0 place-items-center p-2 ${reminderOn ? 'bg-brutal-yellow text-black' : 'bg-white text-black/40 dark:border-bone dark:bg-raised dark:text-bone/40'}`}
+        >
+          {reminderOn ? <Bell size={20} strokeWidth={3} /> : <BellOff size={20} strokeWidth={3} />}
+        </motion.button>
       </div>
     </header>
   )

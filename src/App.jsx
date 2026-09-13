@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Newspaper, ThumbsDown, ThumbsUp, Trophy } from 'lucide-react'
+import { Newspaper, ThumbsDown, ThumbsUp, Trophy, Flag } from 'lucide-react'
 import SplashScreen from './components/SplashScreen'
 import Header from './components/Header'
 import Marquee from './components/Marquee'
 import CategoryPills from './components/CategoryPills'
 import CardStack from './components/CardStack'
 import LiveScoresSection from './components/LiveScores/LiveScoresSection'
+import F1Section from './components/F1/F1Section'
 import ScoreboardModal from './components/LiveScores/ScoreboardModal'
 import ScoreWidget from './components/LiveScores/ScoreWidget'
 import InstallPrompt from './components/LiveScores/InstallPrompt'
+import MorningReminder from './components/MorningReminder'
 import { useNewsStore } from './store/useNewsStore'
 import { useScoreStore } from './store/useScoreStore'
 
@@ -85,10 +87,11 @@ function ViewSwitcher() {
   const tabs = [
     { id: 'news', label: 'News', icon: <Newspaper size={16} strokeWidth={3} />, bg: '#4D7CFE' },
     { id: 'scores', label: `Scores${liveCount ? ` (${liveCount})` : ''}`, icon: <Trophy size={16} strokeWidth={3} />, bg: '#00D9A5' },
+    { id: 'f1', label: 'F1', icon: <Flag size={16} strokeWidth={3} />, bg: '#FF4D5E' },
   ]
 
   return (
-    <div className="mx-auto mt-4 grid max-w-2xl grid-cols-2 gap-2">
+    <div className="mx-auto mt-4 grid max-w-2xl grid-cols-3 gap-2">
       {tabs.map((t) => {
         const active = view === t.id
         return (
@@ -121,7 +124,8 @@ export default function App() {
   const [splash, setSplash] = useState(true)
 
   useEffect(() => {
-    const t = setTimeout(() => setSplash(false), 2100)
+    // Splash dismisses itself (~6s cinematic); this is only a safety net.
+    const t = setTimeout(() => setSplash(false), 9000)
     return () => clearTimeout(t)
   }, [])
 
@@ -139,6 +143,11 @@ export default function App() {
           <div className="mt-4">
             <LiveScoresSection />
           </div>
+        ) : view === 'f1' ? (
+          /* standalone Formula 1 section — tower + standings */
+          <div className="mt-4">
+            <F1Section />
+          </div>
         ) : (
           /* news section */
           <>
@@ -155,10 +164,11 @@ export default function App() {
         News By Sabareesh
       </footer>
 
-      {/* modal scoreboard + mobile ticker + PWA install */}
+      {/* modal scoreboard + mobile ticker + PWA install + morning nudge */}
       <ScoreboardModal />
       <ScoreWidget />
       <InstallPrompt />
+      <MorningReminder />
     </div>
   )
 }

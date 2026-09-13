@@ -4,11 +4,12 @@ import { fetchFootballLive } from '../lib/football'
 import { fetchCricketLive } from '../lib/cricket'
 
 // Scores are separate from news likes — no like/dislike here by design.
-// view: 'news' | 'scores' — scores is a fully separate section.
+// view: 'news' | 'scores' | 'f1' — scores + f1 are fully separate sections.
 const initialView = (() => {
   try {
     const p = new URLSearchParams(window.location.search)
     if (p.get('view') === 'scores' || p.get('scores') === '1') return 'scores'
+    if (p.get('view') === 'f1') return 'f1'
   } catch { /* ignore */ }
   return 'news'
 })()
@@ -106,7 +107,7 @@ export const useScoreStore = create((set, get) => ({
     set({ view })
     try {
       const params = new URLSearchParams(window.location.search)
-      if (view === 'scores') params.set('view', 'scores')
+      if (view === 'scores' || view === 'f1') params.set('view', view)
       else params.delete('view')
       const qs = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : window.location.search))
@@ -114,6 +115,10 @@ export const useScoreStore = create((set, get) => ({
     if (view === 'scores') {
       requestAnimationFrame(() => {
         document.getElementById('live-scores')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    } else if (view === 'f1') {
+      requestAnimationFrame(() => {
+        document.getElementById('f1-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       })
     } else {
       window.scrollTo({ top: 0, behavior: 'smooth' })
