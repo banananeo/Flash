@@ -58,7 +58,7 @@ function articleDevMiddleware() {
   }
 }
 
-// Dev-only parity for Vercel's api/cricket.js detail route: prod serves
+// Dev-only parity for Vercel's api/cricket/detail.js route: prod serves
 // api.cricapi.com match_info through /api/cricket/detail. This middleware
 // does the same on localhost so the scoreboard shows in dev too.
 // Plugin middlewares run before the proxy, so '/api/cricket/detail' never
