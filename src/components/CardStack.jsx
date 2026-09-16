@@ -6,7 +6,12 @@ import { useNewsStore } from '../store/useNewsStore'
 
 function LoadingCard() {
   return (
-    <div className="card-brutal absolute inset-0 flex flex-col overflow-hidden bg-white dark:border-bone dark:bg-surface dark:text-bone">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="card-brutal absolute inset-0 flex flex-col overflow-hidden bg-white dark:border-bone dark:bg-surface dark:text-bone"
+    >
       <div className="h-44 animate-pulse border-b-[4px] border-black bg-brutal-yellow sm:h-52" />
       <div className="flex flex-1 flex-col gap-3 p-5">
         <div className="h-7 animate-pulse border-[3px] border-black bg-black/80" />
@@ -15,7 +20,7 @@ function LoadingCard() {
         <div className="h-4 w-5/6 animate-pulse bg-black/10" />
         <p className="mt-auto text-center font-mono text-xs font-bold uppercase">Fetching live news…</p>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -38,15 +43,19 @@ export default function CardStack() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // keyboard: ← dislike, → like
+  // keyboard: ← dislike, → like (ignored while typing or when any
+  // modal/reader/drawer is open so background cards don't swipe)
   useEffect(() => {
     const onKey = (e) => {
+      const t = e.target
+      if (t && (t.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]'))) return
+      if (document.querySelector('[role="dialog"]')) return
       if (e.key === 'ArrowLeft') swipe('left')
       if (e.key === 'ArrowRight') swipe('right')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [swipe, toggleFlip])
+  }, [swipe])
 
   const doSwipe = (dir) => swipe(dir)
   const current = cards[topIndex]
@@ -117,16 +126,20 @@ export default function CardStack() {
           (including the back-side button) on-screen on short phones. */}
       <div className="relative h-[clamp(430px,68dvh,540px)] sm:h-[560px]">
         <AnimatePresence mode="popLayout">
-          {status === 'loading' ? (
+          {/* skeleton only when there is no card to show — background
+              refreshes keep the current card instead of flashing */}
+          {status === 'loading' && !current ? (
             <LoadingCard key="loading" />
           ) : (
-            <FlashCard
-              key={current.id}
-              article={current}
-              index={0}
-              active
-              onSwipe={doSwipe}
-            />
+            current && (
+              <FlashCard
+                key={current.id ?? current.url ?? topIndex}
+                article={current}
+                index={0}
+                active
+                onSwipe={doSwipe}
+              />
+            )
           )}
         </AnimatePresence>
       </div>
@@ -147,7 +160,8 @@ export default function CardStack() {
           data-flip-hint
           whileHover={{ y: -3 }}
           whileTap={{ scale: 0.85, rotate: -2 }}
-          onClick={() => document.querySelector('.perspective-1000')?.click()}
+          onClick={toggleFlip}
+          aria-label="Flip card"
           className="btn-brutal flex items-center gap-2 bg-brutal-yellow px-5 py-3 text-sm"
         >
           <FlipHorizontal2 size={18} strokeWidth={3} /> FLIP

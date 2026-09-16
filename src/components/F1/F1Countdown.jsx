@@ -41,6 +41,13 @@ export default function F1Countdown({ nextRace }) {
   }
 
   const target = new Date(nextRace.dateUTC).getTime()
+  if (!Number.isFinite(target)) {
+    return (
+      <div className="border-[3px] border-black bg-white px-3 py-2 text-xs font-black uppercase text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone">
+        Race date TBD — check back soon
+      </div>
+    )
+  }
   const parts = now == null ? null : countdownParts(target, now)
   const { d, h, m, live } = parts || {}
   const pad = (n) => String(n).padStart(2, '0')

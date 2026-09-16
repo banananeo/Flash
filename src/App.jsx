@@ -82,7 +82,11 @@ function ReactionPanel() {
 function ViewSwitcher() {
   const view = useScoreStore((s) => s.view)
   const setView = useScoreStore((s) => s.setView)
-  const liveCount = useScoreStore((s) => s.liveCount)()
+  // NOTE: select the count itself — subscribing to the liveCount function
+  // identity never re-renders, so the badge would go stale
+  const liveCount = useScoreStore(
+    (s) => [...(s.football || []), ...(s.cricket || [])].filter((m) => m.status === 'live').length,
+  )
 
   const tabs = [
     { id: 'news', label: 'News', icon: <Newspaper size={16} strokeWidth={3} />, bg: '#4D7CFE' },

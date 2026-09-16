@@ -12,7 +12,7 @@ function ResultRow({ r, i }) {
       className={`flex items-center gap-2 border-[3px] px-2 py-1.5 shadow-brutal-xs ${r.pos === 1 ? 'border-black bg-brutal-yellow text-black' : 'border-black bg-white text-black dark:border-bone dark:bg-surface dark:text-bone'}`}
     >
       <span className="w-7 shrink-0 font-black text-lg">{classified ? r.pos : r.posText || '–'}</span>
-      <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: `#${r.colour || '666666'}` }} />
+      <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-black text-sm leading-tight">
           {r.acro} <span className="font-mono text-[10px] font-bold uppercase opacity-60">{r.team}</span>
@@ -31,6 +31,12 @@ function ResultRow({ r, i }) {
 }
 
 // Per-round session results: Race | Qualifying toggle + round selector.
+// strip a stray leading '#' — upstream sometimes includes it, and '##..'
+// is an invalid colour (renders an invisible bar)
+const teamColour = (c) => `#${String(c || '666666').replace(/^#/, '')}`
+
+// lib uses pos 99 as "unknown" — never show a literal P99
+const qualiPos = (p) => (p == null || p >= 99 ? 'P–' : `P${p}`)
 export default function F1Results({ nextRound }) {
   const [mode, setMode] = useState('race') // race | qualifying
   const schedule = useF1Store((s) => s.schedule)
@@ -55,10 +61,15 @@ export default function F1Results({ nextRound }) {
           Round
           <select
             value={resultsRound || ''}
-            onChange={(e) => e.target.value && fetchRound(e.target.value)}
+            onChange={(e) => fetchRound(e.target.value || 'last')}
             className="border-2 border-black bg-white px-2 py-1.5 text-sm font-bold text-black"
           >
             {!resultsRound && <option value="">Latest</option>}
+            {/* current round may not be in the completed list (schedule lag)
+                — always render it so the select never goes blank */}
+            {!!resultsRound && !doneRounds.some((r) => String(r.round) === String(resultsRound)) && (
+              <option value={resultsRound}>R{resultsRound}</option>
+            )}
             {doneRounds.map((r) => (
               <option key={r.round} value={r.round}>R{r.round} • {r.name}</option>
             ))}
@@ -108,8 +119,8 @@ export default function F1Results({ nextRound }) {
               key={r.num || r.acro || i}
               className={`flex items-center gap-2 border-[3px] px-2 py-1.5 shadow-brutal-xs ${r.pos === 1 ? 'border-black bg-brutal-mint text-black' : 'border-black bg-white text-black dark:border-bone dark:bg-surface dark:text-bone'}`}
             >
-              <span className="w-7 shrink-0 font-black text-lg">P{r.pos}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: `#${r.colour || '666666'}` }} />
+              <span className="w-7 shrink-0 font-black text-lg">{qualiPos(r.pos)}</span>
+              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-black text-sm leading-tight">
                   {r.acro} <span className="font-mono text-[10px] font-bold uppercase opacity-60">{r.team}</span>

@@ -12,7 +12,7 @@ export default function MorningReminder() {
   const visible = useReminderStore((s) => s.visible)
   const enabled = useReminderStore((s) => s.enabled)
   const hour = useReminderStore((s) => s.hour)
-  const setHour = useReminderStore((s) => s.setHour)
+  const bumpHour = useReminderStore((s) => s.bumpHour)
   const setEnabled = useReminderStore((s) => s.setEnabled)
   const read = useReminderStore((s) => s.read)
   const snooze = useReminderStore((s) => s.snooze)
@@ -34,6 +34,16 @@ export default function MorningReminder() {
       setCanNotify(typeof Notification !== 'undefined' && Notification.permission === 'default')
     } catch {
       setCanNotify(false)
+    }
+  }, [visible])
+
+  // lock background scroll while the reminder modal is open
+  useEffect(() => {
+    if (!visible) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
     }
   }, [visible])
 
@@ -110,9 +120,9 @@ export default function MorningReminder() {
                   <Bell size={13} strokeWidth={3} /> Remind at
                 </span>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setHour(hour - 1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Earlier hour">−</button>
+                  <button onClick={() => bumpHour(-1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Earlier hour">−</button>
                   <span className="min-w-14 text-center font-black text-sm">{fmtHour(hour)}</span>
-                  <button onClick={() => setHour(hour + 1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Later hour">+</button>
+                  <button onClick={() => bumpHour(1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Later hour">+</button>
                 </div>
               </div>
 

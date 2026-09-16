@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { useScoreStore, normalizeTeam } from '../../store/useScoreStore'
+import { useScoreStore } from '../../store/useScoreStore'
+
+const teamColour = (c) => `#${String(c || '666666').replace(/^#/, '')}`
 
 function StarButton({ label, active, onToggle }) {
   return (
@@ -19,13 +21,15 @@ function StarButton({ label, active, onToggle }) {
 // Championship tables: Drivers | Constructors toggle.
 export default function F1Standings({ drivers, teams }) {
   const [tab, setTab] = useState('drivers') // drivers | teams
-  const favTeams = useScoreStore((s) => s.favTeams)
-  const toggleFav = useScoreStore((s) => s.toggleFav)
-  const favSet = new Set((favTeams || []).map(normalizeTeam))
+  // driver pins live in their own slice — sharing team favs made the scores
+  // section show "no favourite-team matches" after pinning VER
+  const f1Favs = useScoreStore((s) => s.f1Favs)
+  const toggleF1Fav = useScoreStore((s) => s.toggleF1Fav)
+  const favSet = new Set(f1Favs || [])
 
   const dRows = [...(drivers || [])].sort((a, b) => {
-    const af = favSet.has(normalizeTeam(a.acro)) ? 0 : 1
-    const bf = favSet.has(normalizeTeam(b.acro)) ? 0 : 1
+    const af = favSet.has(a.acro) ? 0 : 1
+    const bf = favSet.has(b.acro) ? 0 : 1
     return af - bf || a.pos - b.pos
   })
   const tRows = [...(teams || [])].sort((a, b) => a.pos - b.pos)
@@ -55,9 +59,9 @@ export default function F1Standings({ drivers, teams }) {
               key={r.num || r.acro || i}
               className="flex items-center gap-2 border-[3px] border-black bg-white px-2 py-1.5 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone"
             >
-              <StarButton label={r.acro} active={favSet.has(normalizeTeam(r.acro))} onToggle={() => r.acro && toggleFav(r.acro)} />
+              <StarButton label={r.acro} active={favSet.has(r.acro)} onToggle={() => r.acro && toggleF1Fav(r.acro)} />
               <span className="w-7 shrink-0 font-black text-lg">{r.pos}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: `#${r.colour || '666666'}` }} />
+              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-black text-sm leading-tight">{r.acro}</p>
                 <p className="truncate font-mono text-[10px] font-bold uppercase opacity-60">{r.name} • {r.team}</p>
@@ -84,7 +88,7 @@ export default function F1Standings({ drivers, teams }) {
               className="flex items-center gap-2 border-[3px] border-black bg-white px-2 py-1.5 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone"
             >
               <span className="w-7 shrink-0 font-black text-lg">{r.pos}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: `#${r.colour || '666666'}` }} />
+              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
               <p className="min-w-0 flex-1 truncate font-black text-sm">{r.team}</p>
               {!!r.wins && (
                 <span className="shrink-0 font-mono text-[10px] font-bold opacity-60">{r.wins}W</span>

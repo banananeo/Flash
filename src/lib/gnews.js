@@ -16,11 +16,22 @@ const GNEWS_CATEGORY = {
 const fallbackImg = (seed) =>
   `https://picsum.photos/seed/${encodeURIComponent(seed)}/800/500`
 
+async function readJSON(res) {
+  try {
+    return await res.json()
+  } catch {
+    throw new Error('Bad response from news server — showing mock')
+  }
+}
+
 function mapArticle(a, pillId, i) {
-  const raw = (a.description || a.content || '').replace(/\[.*chars\]$/, '').trim()
+  // narrow match: GNews appends "[NNN chars]" — a greedy pattern would eat
+  // legit brackets earlier in the text
+  const raw = (a.description || a.content || '').replace(/\[\d+\s*chars\]$/, '').trim()
   const summary = raw ? raw.slice(0, 240) : a.title
   return {
-    id: a.id || a.url || `${pillId}-${i}-${Date.now()}`,
+    // stable id (no Date.now): unstable keys remount cards + bust the cache
+    id: a.id || a.url || `${pillId}-${i}`,
     category: pillId,
     title: (a.title || 'Untitled').toUpperCase().slice(0, 140),
     summary,
@@ -42,6 +53,8 @@ function friendlyNetworkError(e) {
 
 export async function fetchGNews(pillId = 'all', max = 10) {
   const gcat = GNEWS_CATEGORY[pillId] ?? null
+  // clamp: protects the 100 req/day quota from oversized page requests
+  const count = Math.min(10, Math.max(1, parseInt(max, 10) || 10))
 
   // 10-min cache to protect the 100 req/day free quota
   const cacheKey = `gnews-cache-${pillId}`
@@ -61,11 +74,11 @@ export async function fetchGNews(pillId = 'all', max = 10) {
   // 1) Same-origin proxy first — works in dev (Vite) AND prod (Vercel
   // serverless api/gnews.js). Key stays server-side, no CORS issues.
   try {
-    const proxyParams = new URLSearchParams({ max: String(max) })
+    const proxyParams = new URLSearchParams({ max: String(count) })
     if (gcat) proxyParams.set('category', gcat)
     const res = await fetch(`/api/gnews?${proxyParams}`)
     if (res.ok) {
-      const data = await res.json()
+      const data = await readJSON(res)
       const articles = (data.articles || []).map((a, i) => mapArticle(a, pillId, i))
       if (!articles.length) throw new Error('No articles returned')
       saveCache(articles)
@@ -106,7 +119,7 @@ export async function fetchGNews(pillId = 'all', max = 10) {
   const params = new URLSearchParams({
     lang: 'en',
     country: 'us',
-    max: String(max),
+    max: String(count),
     apikey: API_KEY,
   })
   if (gcat) params.set('category', gcat)
@@ -119,7 +132,7 @@ export async function fetchGNews(pillId = 'all', max = 10) {
   }
   if (res.status === 429) throw new Error('GNews quota hit (100/day) — showing mock')
   if (!res.ok) throw new Error(`GNews error ${res.status}`)
-  const data = await res.json()
+  const data = await readJSON(res)
   const articles = (data.articles || []).map((a, i) => mapArticle(a, pillId, i))
   if (!articles.length) throw new Error('No articles returned')
 

@@ -3,13 +3,14 @@
 // Tries Vite proxy first (key server-side), falls back to direct fetch
 // with header (api-sports allows browser CORS).
 
-function mapFixture(f) {
+function mapFixture(f, i = 0) {
   const short = f.fixture?.status?.short
   const isLive = ['1H', '2H', 'ET', 'P', 'LIVE', 'HT', 'BT'].includes(short)
   const isFT = ['FT', 'AET', 'PEN'].includes(short)
   const elapsed = f.fixture?.status?.elapsed
   return {
-    id: `fb-${f.fixture?.id}`,
+    // index fallback: bare `fb-undefined` ids would collide + break keys
+    id: `fb-${f.fixture?.id ?? `x${i}`}`,
     sport: 'football',
     league: `${f.league?.name || 'Football'} • ${f.league?.round || f.fixture?.status?.long || ''}`.trim(),
     leagueName: f.league?.name || 'Football',
@@ -26,6 +27,14 @@ function mapFixture(f) {
     stats: (f.statistics || []).slice(0, 3).map((s) => ({ label: s.type, display: `${s.value ?? '–'}` })),
     rawId: f.fixture?.id,
     time: f.fixture?.date,
+  }
+}
+
+async function readJSON(res, what = 'Football') {
+  try {
+    return await res.json()
+  } catch {
+    throw new Error(`${what} sent a bad response — showing mock`)
   }
 }
 
@@ -89,11 +98,11 @@ export async function fetchFootballLive() {
     } catch { /* keep default */ }
     throw new Error(msg)
   }
-  const data = await res.json()
+  const data = await readJSON(res)
   if (data.errors && Object.keys(data.errors).length) {
     throw new Error(`Football key error: ${Object.values(data.errors).flat().join(' ')}`)
   }
-  const matches = (data.response || []).slice(0, 15).map(mapFixture)
+  const matches = (data.response || []).slice(0, 15).map((f, i) => mapFixture(f, i))
 
   try {
     localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), matches }))
@@ -120,6 +129,6 @@ export async function fetchFixtureDetail(fixtureId) {
     }
   }
   if (!res.ok) throw new Error(`Fixture error ${res.status}`)
-  const data = await res.json()
+  const data = await readJSON(res, 'Fixture')
   return data.response || []
 }

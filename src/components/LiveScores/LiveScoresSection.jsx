@@ -20,7 +20,10 @@ export default function LiveScoresSection() {
   const error = useScoreStore((s) => s.error)
   const source = useScoreStore((s) => s.source)
   const fetchScores = useScoreStore((s) => s.fetchScores)
-  const liveCount = useScoreStore((s) => s.liveCount)()
+  // NOTE: select the count itself — the liveCount fn identity never changes
+  const liveCount = useScoreStore(
+    (s) => [...(s.football || []), ...(s.cricket || [])].filter((m) => m.status === 'live').length,
+  )
   const favTeams = useScoreStore((s) => s.favTeams)
   const toggleFav = useScoreStore((s) => s.toggleFav)
   const getVisibleMatches = useScoreStore((s) => s.getVisibleMatches)

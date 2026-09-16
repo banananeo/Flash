@@ -25,7 +25,8 @@ body {
    Only scaffolding inverts: page ink, raised surfaces, bone borders/text.
    Hard shadows stay black — on ink they read as subtle depth while the
    bone borders carry the brutalist edge. */
-.dark html, .dark body {
+/* NOTE: .dark lives ON <html> — `.dark html` never matches */
+html.dark, html.dark body {
   background: #0D0D12;
 }
 .dark body {

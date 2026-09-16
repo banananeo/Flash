@@ -4,10 +4,13 @@ import { useNewsStore } from '../store/useNewsStore'
 import { categoryStyle } from '../data/mockNews'
 
 export default function BookmarkDrawer() {
-  const show = useNewsStore((s) => s.showBookmarks)
-  const toggle = useNewsStore((s) => s.toggleBookmarks)
-  const bookmarks = useNewsStore((s) => s.bookmarks)
-  const remove = useNewsStore((s) => s.removeBookmark)
+  // NOTE: the bookmark slices don't exist in the store yet, so this drawer
+  // is currently never rendered. Defaults below keep it crash-safe until
+  // the feature is wired up — do not render without implementing the store.
+  const show = useNewsStore((s) => s.showBookmarks) ?? false
+  const toggle = useNewsStore((s) => s.toggleBookmarks) ?? (() => {})
+  const bookmarks = useNewsStore((s) => s.bookmarks) ?? []
+  const remove = useNewsStore((s) => s.removeBookmark) ?? (() => {})
 
   return (
     <AnimatePresence>
@@ -25,11 +28,14 @@ export default function BookmarkDrawer() {
             animate={{ x: 0 }}
             exit={{ x: 420 }}
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Saved stories"
             className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col border-l-[4px] border-black bg-brutal-cream"
           >
             <div className="flex items-center justify-between border-b-[4px] border-black bg-brutal-pink p-4">
               <p className="font-black text-2xl tracking-tight">SAVED ★ {bookmarks.length}</p>
-              <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={toggle} className="btn-brutal bg-white p-2">
+              <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={toggle} aria-label="Close bookmarks" className="btn-brutal bg-white p-2">
                 <X size={20} strokeWidth={3} />
               </motion.button>
             </div>
@@ -43,7 +49,7 @@ export default function BookmarkDrawer() {
                 <div className="flex flex-col gap-3">
                   {bookmarks.map((b, i) => (
                     <motion.div
-                      key={b.id}
+                      key={b.id ?? b.url ?? i}
                       initial={{ x: 60, opacity: 0, rotate: 1 }}
                       animate={{ x: 0, opacity: 1, rotate: i % 2 ? 0.5 : -0.5 }}
                       className="card-brutal bg-white p-3 shadow-brutal-sm"

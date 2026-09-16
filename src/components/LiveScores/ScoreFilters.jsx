@@ -50,7 +50,7 @@ export default function ScoreFilters({ sport }) {
     <div className="mt-3 flex flex-col gap-2 border-[3px] border-black bg-brutal-cream p-3 shadow-brutal-xs dark:border-bone dark:bg-raised">
       {/* favorites */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="badge-brutal bg-black text-white dark:border-bone">★ FAVS ({favTeams.length})</span>
+        <span className="badge-brutal bg-black text-white dark:border-bone">★ FAVS ({(favTeams || []).length})</span>
         {(favTeams || []).map((t) => (
           <button
             key={t}

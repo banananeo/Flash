@@ -14,12 +14,23 @@ export default function ArticleModal({ article, onClose }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!article) return // no listener while closed
     const onKey = (e) => {
       if (e.key === 'Escape') onClose?.()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [article, onClose])
+
+  // lock background scroll while the reader is open
+  useEffect(() => {
+    if (!article) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [article])
 
   useEffect(() => {
     if (!article?.url) {
@@ -124,7 +135,7 @@ export default function ArticleModal({ article, onClose }) {
                   </div>
                 )}
 
-                {data && (
+                {Array.isArray(data?.paragraphs) && data.paragraphs.length > 0 && (
                   <div className="mt-3 flex flex-col gap-3">
                     {data.paragraphs.map((p, i) => (
                       <p key={i} className="text-[15px] font-medium leading-relaxed">{p}</p>

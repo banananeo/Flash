@@ -7,7 +7,7 @@ const MAX_HOUR = 11
 function load() {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || 'null')
-    if (v && typeof v === 'object') return v
+    if (v && typeof v === 'object' && !Array.isArray(v)) return v
   } catch { /* ignore */ }
   return {}
 }
@@ -53,6 +53,13 @@ export const useReminderStore = create((set, get) => {
       save({ hour: h })
     },
 
+    // delta-based (±1) so rapid taps can't lose updates to a stale closure
+    bumpHour: (delta) => {
+      const h = clampHour(get().hour + delta)
+      set({ hour: h })
+      save({ hour: h })
+    },
+
     setEnabled: (enabled) => {
       set({ enabled: !!enabled, visible: false })
       save({ enabled: !!enabled })
@@ -73,6 +80,9 @@ export const useReminderStore = create((set, get) => {
               try {
                 window.focus()
               } catch { /* ignore */ }
+              try {
+                n.close()
+              } catch { /* ignore */ }
               get().read()
             }
           }
@@ -92,7 +102,13 @@ export const useReminderStore = create((set, get) => {
       save({ snoozeUntil: until })
     },
 
-    dismiss: () => set({ visible: false }),
+    // Dismiss = done for today (otherwise the minute-tick re-shows the
+    // modal within 60s). Explicit "Snooze 1h" / "Turn off" stay separate.
+    dismiss: () => {
+      const today = dayOf(Date.now())
+      set({ visible: false, lastShownDate: today })
+      save({ lastShownDate: today })
+    },
 
     openSettings: () => set({ visible: true }),
   }

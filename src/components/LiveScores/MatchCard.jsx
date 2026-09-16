@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
 import { useScoreStore } from '../../store/useScoreStore'
@@ -12,8 +13,17 @@ function LiveDot() {
 }
 
 function TeamLogo({ logo, short }) {
-  if (logo) {
-    return <img src={logo} alt="" className="h-8 w-8 shrink-0 object-contain" loading="lazy" />
+  const [dead, setDead] = useState(false)
+  if (logo && !dead) {
+    return (
+      <img
+        src={logo}
+        alt=""
+        onError={() => setDead(true)}
+        className="h-8 w-8 shrink-0 object-contain"
+        loading="lazy"
+      />
+    )
   }
   return (
     <span className="grid h-8 w-8 shrink-0 place-items-center border-2 border-black bg-brutal-yellow font-black text-[10px]">
@@ -25,6 +35,7 @@ function TeamLogo({ logo, short }) {
 // Full-width row — tap opens full modal scoreboard. No like/dislike here.
 export default function MatchCard({ match, index = 0, isFav = false, onToggleFav }) {
   const openMatch = useScoreStore((s) => s.openMatch)
+  if (!match?.teamA || !match?.teamB) return null
   const isLive = match.status === 'live'
 
   return (
@@ -37,7 +48,14 @@ export default function MatchCard({ match, index = 0, isFav = false, onToggleFav
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') openMatch(match)
+        // ignore keys from the inner star button (it handles its own
+        // activation — otherwise Enter both pins AND opens the match)
+        if (e.target !== e.currentTarget) return
+        if (e.key === 'Enter') openMatch(match)
+        if (e.key === ' ') {
+          e.preventDefault() // don't scroll the page
+          openMatch(match)
+        }
       }}
       className="flex w-full cursor-pointer items-center gap-3 border-[3px] border-black bg-white p-3 text-left text-black shadow-brutal-sm active:shadow-none dark:border-bone dark:bg-surface dark:text-bone"
     >

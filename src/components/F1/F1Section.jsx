@@ -25,6 +25,7 @@ export default function F1Section() {
   const fetchF1 = useF1Store((s) => s.fetchF1)
   const fetchSchedule = useF1Store((s) => s.fetchSchedule)
   const fetchRound = useF1Store((s) => s.fetchRound)
+  const resultsRound = useF1Store((s) => s.resultsRound)
   const retryNow = useF1Store((s) => s.retryNow)
 
   useEffect(() => {
@@ -56,7 +57,9 @@ export default function F1Section() {
           )}
           <motion.button
             whileTap={{ scale: 0.9, rotate: -30 }}
-            onClick={() => { retryNow(); fetchSchedule() }}
+            // refresh everything visible — results too, or the Results tab
+            // silently shows last-race data after the flag
+            onClick={() => { retryNow(); fetchSchedule(); fetchRound(resultsRound || 'last') }}
             className="btn-brutal ml-auto flex items-center gap-1 bg-white px-3 py-1.5 text-xs text-black dark:border-bone dark:bg-raised dark:text-bone"
           >
             <RefreshCw size={14} strokeWidth={3} /> Refresh

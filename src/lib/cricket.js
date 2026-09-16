@@ -67,6 +67,25 @@ function oversOf(scores, team) {
 
 const shortOf = (name) => String(name || '').slice(0, 3).toUpperCase();
 
+// new Date(invalid).toISOString() throws RangeError — never trust upstream dates
+const safeISODate = (v) => {
+  if (!v) return undefined
+  try {
+    const d = new Date(v)
+    return Number.isFinite(d.getTime()) ? d.toISOString() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function readJSON(res, what = 'Cricket') {
+  try {
+    return await res.json()
+  } catch {
+    throw new Error(`${what} sent a bad response — showing mock`)
+  }
+}
+
 export function mapCricData(m = {}) {
   const rawId = m.id;
   const teams = m.teams || [];
@@ -105,7 +124,7 @@ export function mapCricData(m = {}) {
     batters: [],
     bowlers: [],
     rawId,
-    time: m.dateTimeGMT || (m.date ? new Date(m.date).toISOString() : undefined),
+    time: m.dateTimeGMT || safeISODate(m.date),
     venue: m.venue || '',
   };
 }
@@ -162,7 +181,7 @@ export async function fetchCricketLive() {
     } catch { /* keep default */ }
     throw new Error(msg);
   }
-  const data = await res.json();
+  const data = await readJSON(res);
   if (data?.status === 'failure') {
     throw new Error(data?.reason ? String(data.reason).slice(0, 160) : 'Cricket API failure — showing mock');
   }
@@ -189,7 +208,7 @@ export async function fetchCricketDetail(matchId) {
     throw friendlyCricketError(e);
   }
   if (!res.ok) throw new Error(`Scoreboard error ${res.status}`);
-  const data = await res.json();
+  const data = await readJSON(res, 'Scoreboard');
   return normalizeDetail(data);
 }
 

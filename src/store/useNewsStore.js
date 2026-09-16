@@ -4,16 +4,31 @@ import { fetchGNews } from '../lib/gnews'
 
 const load = (key) => {
   try {
-    return JSON.parse(localStorage.getItem(key) || '[]')
+    const v = JSON.parse(localStorage.getItem(key) || '[]')
+    return Array.isArray(v) ? v : []
   } catch {
     return []
   }
+}
+
+// Monotonic fetch token — rapid setCategory taps race; only the latest
+// response may touch state so a slow stale reply can't clobber fresh cards.
+let newsSeq = 0
+
+function shuffled(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
 }
 
 export const useNewsStore = create((set, get) => ({
   category: 'all',
   cards: MOCK_NEWS,
   topIndex: 0,
+  lastDir: 'right', // direction of the most recent swipe (exit animation)
   likes: load('flash-likes'),
   dislikes: load('flash-dislikes'),
   isFlipped: false,
@@ -29,23 +44,30 @@ export const useNewsStore = create((set, get) => ({
 
   fetchNews: async (category) => {
     const cat = category ?? get().category
+    const mySeq = ++newsSeq
     // NOTE: no client-key gate here — the same-origin /api/gnews proxy
     // (Vite dev + Vercel prod) holds the key server-side. fetchGNews tries
     // the proxy first and only needs VITE_GNEWS for direct fallback.
     set({ status: 'loading', error: null })
     try {
       const { articles } = await fetchGNews(cat, 10)
+      if (mySeq !== newsSeq) return // stale reply — a newer fetch is in flight
       if (!articles.length) throw new Error('No articles returned')
-      set({ cards: articles, topIndex: 0, isFlipped: false, status: 'live', source: 'live' })
+      set({ cards: articles, topIndex: 0, isFlipped: false, status: 'live', source: 'live', lastDir: 'right' })
     } catch (e) {
+      if (mySeq !== newsSeq) return
       // quota / network → graceful mock fallback so design never breaks
       const isQuota = /quota/i.test(e.message)
       const current = get().cards
+      const needsFallback = !current?.length
       set({
         status: 'error',
-        source: current === MOCK_NEWS || !current.length ? 'mock' : 'live',
+        // keep the previous source when we keep showing previous cards;
+        // only claim 'mock' when we actually fall back to MOCK_NEWS
+        // (reference equality breaks after reshuffle copies the array).
+        source: needsFallback ? 'mock' : get().source,
         error: e.message,
-        ...(current.length ? {} : { cards: MOCK_NEWS, topIndex: 0 }),
+        ...(needsFallback ? { cards: MOCK_NEWS, topIndex: 0 } : {}),
       })
       if (isQuota) console.warn('[GNews]', e.message)
     }
@@ -72,14 +94,12 @@ export const useNewsStore = create((set, get) => ({
           localStorage.setItem('flash-dislikes', JSON.stringify(dislikes))
         } catch { /* ignore */ }
       }
-      return { likes, dislikes, topIndex: s.topIndex + 1, isFlipped: false }
+      // remembered so the exiting card flies the way it was swiped
+      return { likes, dislikes, topIndex: s.topIndex + 1, isFlipped: false, lastDir: dir === 'left' ? 'left' : 'right' }
     }),
 
   reshuffle: () =>
-    set((s) => {
-      const shuffled = [...s.cards].sort(() => Math.random() - 0.5)
-      return { cards: shuffled, topIndex: 0, isFlipped: false }
-    }),
+    set((s) => ({ cards: shuffled(s.cards), topIndex: 0, isFlipped: false })),
 
   reset: () => set({ topIndex: 0, isFlipped: false }),
 

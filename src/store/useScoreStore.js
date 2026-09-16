@@ -3,6 +3,9 @@ import { MOCK_FOOTBALL, MOCK_CRICKET } from '../data/mockScores'
 import { fetchFootballLive } from '../lib/football'
 import { fetchCricketLive } from '../lib/cricket'
 
+// Latest-wins token for overlapping sport fetches (tab switches, polls).
+let scoreSeq = 0
+
 // Scores are separate from news likes — no like/dislike here by design.
 // view: 'news' | 'scores' | 'f1' — scores + f1 are fully separate sections.
 const initialView = (() => {
@@ -19,6 +22,7 @@ function loadJSON(key, fallback) {
     const raw = localStorage.getItem(key)
     if (!raw) return fallback
     const v = JSON.parse(raw)
+    if (Array.isArray(fallback) && !Array.isArray(v)) return fallback
     return v ?? fallback
   } catch {
     return fallback
@@ -110,7 +114,9 @@ export const useScoreStore = create((set, get) => ({
       if (view === 'scores' || view === 'f1') params.set('view', view)
       else params.delete('view')
       const qs = params.toString()
-      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : window.location.search))
+      // empty qs must clear the query string — falling back to the old
+      // window.location.search would resurrect a deleted ?view=scores
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
     } catch { /* ignore */ }
     if (view === 'scores') {
       requestAnimationFrame(() => {
@@ -134,7 +140,28 @@ export const useScoreStore = create((set, get) => ({
 
   // ---- favorites + filters (persisted) ----
   favTeams: loadJSON('flash-favs-v1', []),
-  filters: loadJSON('flash-filters-v1', DEFAULT_FILTERS),
+  // F1 driver pins live apart from team favs so pinning VER can't make the
+  // scores section claim "no favourite-team matches"
+  f1Favs: loadJSON('flash-f1favs-v1', []),
+  filters: (() => {
+    const v = loadJSON('flash-filters-v1', null)
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return DEFAULT_FILTERS
+    return {
+      football: { ...DEFAULT_FILTERS.football, ...(v.football || {}) },
+      cricket: { ...DEFAULT_FILTERS.cricket, ...(v.cricket || {}) },
+    }
+  })(),
+
+  toggleF1Fav: (acro) => {
+    const norm = String(acro || '').trim().toUpperCase()
+    if (!norm) return
+    const current = get().f1Favs || []
+    const next = current.includes(norm)
+      ? current.filter((t) => t !== norm)
+      : [...current, norm]
+    set({ f1Favs: next })
+    saveJSON('flash-f1favs-v1', next)
+  },
 
   toggleFav: (teamName) => {
     const norm = normalizeTeam(teamName)
@@ -187,28 +214,42 @@ export const useScoreStore = create((set, get) => ({
 
   fetchScores: async (sport) => {
     const s = sport ?? get().sport
-    set({ status: 'loading', error: null })
+    const mySeq = ++scoreSeq
+    // don't flash SYNC on every 60s poll when we're already showing live
+    // data, and let overlapping football/cricket fetches resolve with
+    // latest-wins (a slow stale reply must not flip status/error)
+    const hadLive = get().status === 'live' && (get()[s] || []).length > 0
+    set(hadLive ? { error: null } : { status: 'loading', error: null })
     try {
       if (s === 'football') {
         // NOTE: no client-key gate — /api/football proxy holds the key
         // server-side (Vite dev + Vercel prod). fetchFootballLive falls
         // back to direct only if the proxy lacks the key.
         const { matches } = await fetchFootballLive()
+        if (mySeq !== scoreSeq) return
         if (matches.length) {
           set((st) => ({ football: matches, status: 'live', source: { ...st.source, football: 'live' } }))
-        } else {
+        } else if (!hadLive) {
           set({ status: 'mock', error: 'No live football right now — showing mock' })
+        } else {
+          // keep last-good live rows, just note the empty poll
+          set({ error: 'No live football right now — showing last data' })
         }
       } else {
         const { matches } = await fetchCricketLive()
+        if (mySeq !== scoreSeq) return
         if (matches.length) {
           set((st) => ({ cricket: matches, status: 'live', source: { ...st.source, cricket: 'live' } }))
-        } else {
+        } else if (!hadLive) {
           set({ status: 'mock', error: 'No live cricket right now — showing mock' })
+        } else {
+          set({ error: 'No live cricket right now — showing last data' })
         }
       }
     } catch (e) {
-      set({ status: 'error', error: e.message })
+      if (mySeq !== scoreSeq) return
+      // keep last-good rows on failure instead of blanking to an error state
+      set(hadLive ? { error: e.message } : { status: 'error', error: e.message })
     }
   },
 
@@ -235,6 +276,6 @@ export const useScoreStore = create((set, get) => ({
 
   liveCount: () => {
     const { football, cricket } = get()
-    return [...football, ...cricket].filter((m) => m.status === 'live').length
+    return [...(football || []), ...(cricket || [])].filter((m) => m.status === 'live').length
   },
 }))

@@ -29,7 +29,7 @@ function apply(theme) {
   } catch { /* ignore */ }
 }
 
-export const useThemeStore = create((set) => ({
+export const useThemeStore = create((set, get) => ({
   theme: initialTheme(),
 
   // call once on boot (before paint via index.html guard + here for safety)
@@ -49,7 +49,9 @@ export const useThemeStore = create((set) => ({
   },
 
   toggle: () => {
-    const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark'
+    // derive from store state (not the DOM) so a manually-edited class
+    // list can never desync the persisted theme
+    const next = get().theme === 'dark' ? 'light' : 'dark'
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch { /* ignore */ }

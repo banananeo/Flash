@@ -2,17 +2,19 @@ import { motion } from 'framer-motion'
 
 export function ScoreHero({ match }) {
   const isLive = match.status === 'live'
+  const teamA = match.teamA ?? {}
+  const teamB = match.teamB ?? {}
   const scoreLine =
     match.sport === 'football'
-      ? `${match.teamA.score} — ${match.teamB.score}`
-      : `${match.teamA.score} vs ${match.teamB.score}`
+      ? `${teamA.score ?? '–'} — ${teamB.score ?? '–'}`
+      : `${teamA.score ?? '–'} vs ${teamB.score ?? '–'}`
   return (
     <div className="border-[3px] border-black bg-black p-4 text-center text-white shadow-brutal-sm dark:border-bone dark:bg-ink">
       <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-brutal-yellow">{match.league}</p>
       <div className="mt-1 flex items-center justify-between gap-2">
         <div className="flex-1">
-          <p className="font-black text-xl leading-tight">{match.teamA.short}</p>
-          <p className="font-mono text-[10px] uppercase text-white/60">{match.teamA.name}</p>
+          <p className="font-black text-xl leading-tight">{teamA.short ?? '–'}</p>
+          <p className="font-mono text-[10px] uppercase text-white/60">{teamA.name ?? ''}</p>
         </div>
         <motion.p
           key={scoreLine}
@@ -24,12 +26,12 @@ export function ScoreHero({ match }) {
           {scoreLine}
         </motion.p>
         <div className="flex-1">
-          <p className="font-black text-xl leading-tight">{match.teamB.short}</p>
-          <p className="font-mono text-[10px] uppercase text-white/60">{match.teamB.name}</p>
+          <p className="font-black text-xl leading-tight">{teamB.short ?? '–'}</p>
+          <p className="font-mono text-[10px] uppercase text-white/60">{teamB.name ?? ''}</p>
         </div>
       </div>
       <p className="mt-2 inline-block border-2 border-white/30 px-2 py-0.5 font-mono text-[11px] font-bold uppercase">
-        {match.sport === 'football' ? match.minute : match.meta?.need || match.status.toUpperCase()}
+        {match.sport === 'football' ? match.minute : match.meta?.need || match.status?.toUpperCase?.() || ''}
         {isLive ? ' • ● LIVE' : ''}
       </p>
     </div>

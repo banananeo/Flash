@@ -29,7 +29,11 @@ async function fetchSameOrigin(path, { timeoutMs = 15000 } = {}) {
   }
   if (res.status === 429) throw new F1RateError('F1 rate limit hit — backing off');
   if (!res.ok) throw new F1HttpError(res.status);
-  return res.json();
+  try {
+    return await res.json();
+  } catch {
+    throw new F1HttpError(res.status, 'F1 sent a bad response');
+  }
 }
 
 // Jolpica carries no team colours → static map (2026 grid incl. Audi,

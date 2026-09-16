@@ -5,23 +5,51 @@ import { Download } from 'lucide-react'
 // Captures beforeinstallprompt → brutal install bar. Required for home-screen install.
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState(null)
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('flash-install-dismissed') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [prompting, setPrompting] = useState(false)
 
   useEffect(() => {
     const onPrompt = (e) => {
       e.preventDefault()
       setDeferred(e)
     }
+    // browser-menu installs never fire beforeinstallprompt consumption —
+    // hide the bar so it doesn't stick around post-install
+    const onInstalled = () => setDeferred(null)
     window.addEventListener('beforeinstallprompt', onPrompt)
-    return () => window.removeEventListener('beforeinstallprompt', onPrompt)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt)
+      window.removeEventListener('appinstalled', onInstalled)
+    }
   }, [])
 
   if (!deferred || dismissed) return null
 
   const install = async () => {
-    deferred.prompt()
-    await deferred.userChoice.catch(() => null)
-    setDeferred(null)
+    if (prompting) return // prompt() consumes the event — never fire twice
+    setPrompting(true)
+    try {
+      deferred.prompt()
+      await deferred.userChoice.catch(() => null)
+    } catch { /* ignore */ }
+    finally {
+      setDeferred(null)
+      setPrompting(false)
+    }
+  }
+
+  const dismiss = () => {
+    setDismissed(true)
+    try {
+      localStorage.setItem('flash-install-dismissed', '1')
+    } catch { /* ignore */ }
   }
 
   return (
@@ -32,10 +60,10 @@ export default function InstallPrompt() {
     >
       <Download size={18} strokeWidth={3} className="shrink-0" />
       <p className="text-xs font-black uppercase leading-tight">Install FLASH! on your home screen</p>
-      <button onClick={install} className="ml-auto shrink-0 border-2 border-black bg-black px-2 py-1 text-[11px] font-black text-white">
-        INSTALL
+      <button onClick={install} disabled={prompting} className="ml-auto shrink-0 border-2 border-black bg-black px-2 py-1 text-[11px] font-black text-white disabled:opacity-60">
+        {prompting ? '…' : 'INSTALL'}
       </button>
-      <button onClick={() => setDismissed(true)} className="shrink-0 border-2 border-black bg-white px-1.5 py-0.5 text-[11px] font-black">
+      <button onClick={dismiss} className="shrink-0 border-2 border-black bg-white px-1.5 py-0.5 text-[11px] font-black" aria-label="Dismiss install prompt">
         ✕
       </button>
     </motion.div>

@@ -14,7 +14,9 @@ export function useNews() {
 }
 
 export function timeAgo(iso) {
-  const mins = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  const t = new Date(iso).getTime()
+  if (!iso || !Number.isFinite(t)) return 'just now'
+  const mins = Math.max(1, Math.round((Date.now() - t) / 60000))
   if (mins < 60) return `${mins}m ago`
   const h = Math.round(mins / 60)
   if (h < 24) return `${h}h ago`

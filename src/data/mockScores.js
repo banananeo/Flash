@@ -70,7 +70,7 @@ export const MOCK_CRICKET = [
     status: 'live',
     teamA: { name: 'India', short: 'IND', score: '187/4', overs: '18.2' },
     teamB: { name: 'Australia', short: 'AUS', score: 'Yet to bat', overs: '' },
-    meta: { crr: '10.2', need: 'AUS needs briefing', lastWicket: 'Kohli 68 (41) c Head b Zampa' },
+    meta: { crr: '10.2', need: 'AUS need 188 to win', lastWicket: 'Kohli 68 (41) c Head b Zampa' },
     recentBalls: ['4', '6', '1', 'W', '2', '4'],
     batters: [
       { name: 'Suryakumar', runs: 42, balls: 22 },

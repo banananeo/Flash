@@ -8,7 +8,7 @@ export default function Marquee() {
   // Live headlines when the feed is live; mock ticker only as fallback.
   const headlines =
     source === 'live' && cards.length
-      ? cards.slice(0, 8).map((a) => (a.title || 'UNTITLED').slice(0, 60))
+      ? cards.slice(0, 8).map((a) => ((a?.title || 'UNTITLED').slice(0, 60)))
       : BREAKING_TICKER
   const items = [...headlines, ...headlines]
   return (

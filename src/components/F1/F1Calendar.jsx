@@ -12,10 +12,10 @@ function fmtShort(dateUTC) {
 // Round-number comparison keeps render pure (no wall-clock reads):
 // rounds run in order, so anything before the next round is done.
 function raceState(race, nextRound) {
-  if (nextRound == null) return { label: 'DONE', cls: 'bg-brutal-mint text-black' }
-  if (race.round === nextRound) return { label: 'NEXT', cls: 'bg-brutal-yellow text-black' }
-  if (race.round < nextRound) return { label: 'DONE', cls: 'bg-brutal-mint text-black' }
-  return { label: fmtShort(race.dateUTC).toUpperCase(), cls: 'bg-white text-black dark:bg-raised dark:text-bone' }
+  if (nextRound == null) return { done: true, label: 'DONE', cls: 'bg-brutal-mint text-black' }
+  if (race.round === nextRound) return { done: false, label: 'NEXT', cls: 'bg-brutal-yellow text-black' }
+  if (race.round < nextRound) return { done: true, label: 'DONE', cls: 'bg-brutal-mint text-black' }
+  return { done: false, label: fmtShort(race.dateUTC).toUpperCase(), cls: 'bg-white text-black dark:bg-raised dark:text-bone' }
 }
 
 // Full-season calendar. Tapping a completed round jumps to its results.
@@ -35,11 +35,11 @@ export default function F1Calendar({ schedule, nextRound, onSelectRound }) {
     <div className="flex flex-col gap-1.5">
       {list.map((r) => {
         const st = raceState(r, nextRound)
-        const done = st.label === 'DONE'
+        const done = st.done
         const active = String(resultsRound) === String(r.round)
         return (
           <button
-            key={r.round}
+            key={`${r.round}-${r.name}`}
             disabled={!done}
             onClick={() => done && onSelectRound?.(r.round)}
             className={`flex items-center gap-2 border-[3px] border-black px-2 py-1.5 text-left shadow-brutal-xs dark:border-bone ${active ? 'bg-black text-white dark:bg-ink dark:text-bone' : 'bg-white text-black dark:bg-surface dark:text-bone'} ${done ? '' : 'opacity-90'}`}

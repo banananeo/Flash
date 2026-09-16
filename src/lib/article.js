@@ -29,8 +29,10 @@ export async function fetchArticleText(url) {
     const data = await res.json().catch(() => ({}))
     throw new Error(data.error || `Reader error ${res.status} — open the original instead`)
   }
-  const data = await res.json()
-  if (!data.paragraphs?.length) throw new Error('No readable text — open the original instead')
+  const data = await res.json().catch(() => ({}))
+  if (!Array.isArray(data.paragraphs) || !data.paragraphs.length) {
+    throw new Error('No readable text — open the original instead')
+  }
   memCache.set(url, data)
   return { ...data, cached: false }
 }

@@ -1,25 +1,46 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { BookOpen, Clock, FlipHorizontal2, Quote } from 'lucide-react'
 import { categoryStyle } from '../data/mockNews'
 import { timeAgo } from '../hooks/useNews'
+import { useNewsStore } from '../store/useNewsStore'
 import ArticleModal from './ArticleModal'
 
+const ENTER = (depth) => ({
+  y: 60 * (depth + 1),
+  scale: 1 - depth * 0.06,
+  opacity: 0,
+  rotate: depth * 2,
+})
+
 export default function FlashCard({ article, index = 0, onSwipe, active = true }) {
-  const [flipped, setFlipped] = useState(false)
+  // flip lives in the store (not local state) so the CardStack FLIP button
+  // drives the same state — no DOM querySelector click hack needed
+  const flipped = useNewsStore((s) => s.isFlipped)
+  const toggleFlip = useNewsStore((s) => s.toggleFlip)
   const [shakeKey, setShakeKey] = useState(0)
   const [readerOpen, setReaderOpen] = useState(false)
+  const [imgOk, setImgOk] = useState(true)
+  // exit direction comes from the store (button swipes bypass this
+  // component's drag handler, so local state can't know it)
+  const lastDir = useNewsStore((s) => s.lastDir)
   const x = useMotionValue(0)
+  // timestamp of the last real drag — a mouse-up click right after a drag
+  // must not flip the card
+  const lastDragAt = useRef(0)
 
-  const rotate = useTransform(x, [-300, 300], [-14, 14])
   const saveOpacity = useTransform(x, [40, 140], [0, 1])
   const skipOpacity = useTransform(x, [-40, -140], [0, 1])
 
+  if (!article) return null
   const cat = categoryStyle(article.category)
 
   const handleDragEnd = (_, info) => {
     if (!active) return
     const { offset, velocity } = info
+    if (Math.abs(offset.x) > 10 || Math.abs(velocity.x) > 50) {
+      lastDragAt.current = Date.now()
+    }
     // swipe threshold — fun + forgiving
     if (offset.x > 120 || velocity.x > 600) {
       onSwipe?.('right')
@@ -32,22 +53,33 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
     }
   }
 
+  const shaking = shakeKey > 0 && active
   const depth = Math.min(index, 2)
   const isBack = index > 0
+  const exitX = lastDir === 'left' ? -600 : 600
 
   return (
     <>
     <motion.div
-      key={`${article.id}-${shakeKey}`}
-      initial={{ y: 60 * (depth + 1), scale: 1 - depth * 0.06, opacity: 0, rotate: depth * 2 }}
+      // shakeKey in key: each snap-back remounts so the wobble keyframes
+      // replay; initial={false} on remounts keeps the entrance from
+      // flashing again (the old bug: full re-entry fade on every wobble)
+      key={`${article.id ?? article.url ?? index}-${shakeKey}`}
+      // remount replays the shake keyframes; initial={false} on remounts
+      // keeps the entrance animation from flashing again
+      initial={shakeKey === 0 ? ENTER(depth) : false}
       animate={
-        shakeKey > 0 && active
+        shaking
           ? { x: [0, -14, 14, -10, 10, -4, 0], rotate: [0, -2, 2, -1.5, 1.5, 0, 0], y: 0, scale: 1, opacity: 1 }
           : { x: 0, y: depth * 16, scale: 1 - depth * 0.06, opacity: 1 - depth * 0.25, rotate: depth === 0 ? 0 : depth % 2 ? 2 : -2 }
       }
-      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-      exit={{ x: 600, rotate: 22, opacity: 0, transition: { duration: 0.28, ease: 'easeIn' } }}
-      style={active ? { x, rotate, zIndex: 10 - depth } : { zIndex: 10 - depth }}
+      // keyframe shake needs a tween; the resting pose keeps its spring
+      transition={shaking ? { duration: 0.4, ease: 'easeOut' } : { type: 'spring', stiffness: 380, damping: 28 }}
+      exit={{ x: exitX, rotate: lastDir === 'left' ? -22 : 22, opacity: 0, transition: { duration: 0.28, ease: 'easeIn' } }}
+      // NOTE: rotate stays out of style on purpose — the drag-tilt comes
+      // from `rotate` MV while `animate` also writes rotate, and the two
+      // fight (tilt-while-drag gets swallowed). `x` alone is unambiguous.
+      style={active ? { x, zIndex: 10 - depth } : { zIndex: 10 - depth }}
       className="absolute inset-0"
     >
       <motion.div
@@ -56,7 +88,13 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
         dragElastic={0.75}
         onDragEnd={handleDragEnd}
         whileDrag={{ scale: 1.04, rotate: 1, cursor: 'grabbing' }}
-        onClick={() => active && !isBack && setFlipped((f) => !f)}
+        onClick={() => {
+          if (!active || isBack) return
+          // a mouse-up click lands right after a drag ends — ignore flips
+          // within 250ms of real drag movement
+          if (Date.now() - lastDragAt.current < 250) return
+          toggleFlip()
+        }}
         className={`perspective-1000 h-full w-full ${active && !isBack ? 'cursor-grab' : ''}`}
       >
         <motion.div
@@ -67,7 +105,19 @@ export default function FlashCard({ article, index = 0, onSwipe, active = true }
           {/* ===== FRONT: summary teaser ===== */}
           <div className="backface-hidden card-brutal absolute inset-0 flex flex-col overflow-hidden bg-white dark:border-bone dark:bg-surface dark:text-bone">
             <div className="relative border-b-[4px] border-black dark:border-bone">
-              <img src={article.image} alt="" className="h-36 w-full shrink-0 object-cover sm:h-52" draggable={false} />
+              {imgOk && article.image ? (
+                <img
+                  src={article.image}
+                  alt={article.title}
+                  onError={() => setImgOk(false)}
+                  className="h-36 w-full shrink-0 object-cover sm:h-52"
+                  draggable={false}
+                />
+              ) : (
+                <div className="grid h-36 w-full shrink-0 place-items-center bg-brutal-yellow font-black text-4xl sm:h-52" aria-hidden>
+                  ⚡
+                </div>
+              )}
               <div className="absolute left-3 top-3 flex gap-2">
                 <span className="badge-brutal" style={{ backgroundColor: cat.bg }}>
                   {cat.label}

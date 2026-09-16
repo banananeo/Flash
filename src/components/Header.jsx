@@ -38,7 +38,15 @@ export default function Header() {
         {/* reminder bell — same footprint as the theme button so the logo stays centered */}
         <motion.button
           whileTap={{ scale: 0.88 }}
-          onClick={() => (reminderOn ? openReminder() : setReminderOn(true))}
+          onClick={() => {
+            if (reminderOn) openReminder()
+            else {
+              // enabling alone shows nothing (setEnabled hides) — open
+              // settings so the user gets feedback + picks an hour
+              setReminderOn(true)
+              openReminder()
+            }
+          }}
           title={reminderOn ? 'Morning reminder settings' : 'Turn on morning reminder'}
           aria-label={reminderOn ? 'Morning reminder settings' : 'Turn on morning reminder'}
           aria-pressed={!!reminderOn}

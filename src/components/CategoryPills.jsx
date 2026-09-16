@@ -16,6 +16,7 @@ export default function CategoryPills() {
             whileHover={{ y: -3, rotate: active ? 0 : -1 }}
             whileTap={{ scale: 0.9, rotate: 2 }}
             onClick={() => setCategory(c.id)}
+            aria-pressed={active}
             className={`relative shrink-0 border-[3px] border-black px-4 py-1.5 text-sm font-black uppercase tracking-wide transition-shadow dark:border-bone ${
               // Inactive pills always sit on their bright category fill
               // (inline style), so the label stays black in both themes.
