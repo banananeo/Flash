@@ -155,15 +155,15 @@ function DesktopRightRail() {
         </p>
       </button>
 
-      <p className="pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-        FLASH / LESS NOISE. MORE SIGNAL.
-      </p>
+
     </aside>
   )
 }
 
 export default function BriefingSection() {
   const category = useNewsStore((s) => s.category)
+  const region = useNewsStore((s) => s.region)
+  const setRegion = useNewsStore((s) => s.setRegion)
   const searchQuery = useNewsStore((s) => s.searchQuery)
   const setCategory = useNewsStore((s) => s.setCategory)
   const searchNews = useNewsStore((s) => s.searchNews)
@@ -228,8 +228,8 @@ export default function BriefingSection() {
                   key={c.id}
                   onClick={() => setCategory(c.id)}
                   className={`w-full rounded-[12px] px-4 py-2.5 text-left text-[14px] transition-colors ${active
-                      ? 'bg-pulse font-semibold text-ink'
-                      : 'font-medium text-muted hover:bg-sage/60 hover:text-ink'
+                    ? 'bg-pulse font-semibold text-ink'
+                    : 'font-medium text-muted hover:bg-sage/60 hover:text-ink'
                     }`}
                 >
                   {c.label}
@@ -257,9 +257,29 @@ export default function BriefingSection() {
 
         {/* Center / Mobile Main Briefing Column — Flash Card Deck */}
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            {formatEditorialDate()}
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+              {formatEditorialDate()}
+            </p>
+            <div className="inline-flex items-center rounded-full bg-sage p-0.5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setRegion('in')}
+                className={`rounded-full px-2.5 py-1 transition-colors ${region === 'in' ? 'bg-pulse font-bold text-ink' : 'text-muted hover:text-ink'
+                  }`}
+              >
+                🇮🇳 India
+              </button>
+              <button
+                type="button"
+                onClick={() => setRegion('global')}
+                className={`rounded-full px-2.5 py-1 transition-colors ${region === 'global' ? 'bg-pulse font-bold text-ink' : 'text-muted hover:text-ink'
+                  }`}
+              >
+                🌐 Global
+              </button>
+            </div>
+          </div>
           <h1 className="mt-1.5 text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-ink lg:text-[40px]">
             Your daily edge.
           </h1>
@@ -291,8 +311,8 @@ export default function BriefingSection() {
                   key={c.id}
                   onClick={() => setCategory(c.id)}
                   className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] transition-colors ${active
-                      ? 'bg-pulse font-semibold text-ink'
-                      : 'bg-sage font-medium text-muted hover:text-ink'
+                    ? 'bg-pulse font-semibold text-ink'
+                    : 'bg-sage font-medium text-muted hover:text-ink'
                     }`}
                 >
                   {c.label}

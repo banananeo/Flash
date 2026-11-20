@@ -169,6 +169,7 @@ function newsDevMiddleware() {
           const u = new URL(req.url, 'http://localhost')
           const articles = await getNews({
             category: u.searchParams.get('category') || 'all',
+            region: u.searchParams.get('region') || 'in',
             q: u.searchParams.get('q') || '',
             max: u.searchParams.get('max') || '10',
           })

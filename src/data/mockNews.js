@@ -2,6 +2,7 @@
 
 export const CATEGORIES = [
   { id: 'all', label: 'For you' },
+  { id: 'india', label: 'India' },
   { id: 'world', label: 'World' },
   { id: 'technology', label: 'Tech' },
   { id: 'business', label: 'Business' },

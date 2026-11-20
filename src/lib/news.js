@@ -39,11 +39,12 @@ function friendlyNetworkError(e) {
   return e
 }
 
-export async function fetchNews(pillId = 'all', max = 10, query = '') {
+export async function fetchNews(pillId = 'all', max = 10, query = '', region = 'in') {
   const q = String(query || '').trim()
+  const reg = String(region || 'in').toLowerCase() === 'global' ? 'global' : 'in'
   const count = Math.min(20, Math.max(1, parseInt(max, 10) || 10))
 
-  const cacheKey = q ? `news-q-v1-${q.toLowerCase()}` : `news-cache-v1-${pillId}`
+  const cacheKey = q ? `news-q-v2-${reg}-${q.toLowerCase()}` : `news-cache-v2-${reg}-${pillId}`
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
     if (cached && Date.now() - cached.ts < CACHE_MS && cached.articles?.length) {
@@ -51,7 +52,7 @@ export async function fetchNews(pillId = 'all', max = 10, query = '') {
     }
   } catch { /* ignore */ }
 
-  const params = new URLSearchParams({ max: String(count) })
+  const params = new URLSearchParams({ max: String(count), region: reg })
   if (q) params.set('q', q)
   else params.set('category', pillId)
 

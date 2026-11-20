@@ -1,27 +1,67 @@
 // Shared keyless news fetchers (used by api/news.js on Vercel and the Vite
-// dev middleware in vite.config.js). Same idea as _cricket.js / _football.js:
-// public feeds, no API key, no daily quota.
+// dev middleware in vite.config.js).
 //
-//   category tabs → BBC News RSS (images + direct links, reader works)
-//   sports        → ESPN news JSON (cricket + soccer, merged by date)
-//   ?q= search    → Google News RSS (no images, redirect links → external)
-//
-// Output shape (GNews-compatible so the client mapper barely changes):
-//   { id, title, description, url, image, publishedAt, source: { name, url }, external? }
+// Supports two editions:
+//   region = 'in' (DEFAULT — India Regional Edition):
+//     Blends The Hindu (1200x675 HD images + summaries), NDTV (1280x960 HD images),
+//     BBC India, and ESPN Cricket/Football, plus Google News India (gl=IN) for search.
+//   region = 'global':
+//     BBC News RSS sections + ESPN sports + Google News US/Global search.
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 const TIMEOUT_MS = 10000;
 
-// app pill id → BBC feed path segment ('' = top stories)
 export const BBC_SECTION = {
   all: '',
+  india: 'world/asia/india',
   world: 'world',
   business: 'business',
   technology: 'technology',
   science: 'science_and_environment',
   health: 'health',
   entertainment: 'entertainment_and_arts',
+};
+
+// India regional RSS feeds (The Hindu + NDTV + BBC India) — all keyless, all include HD media:content images & summaries
+export const INDIA_FEEDS = {
+  all: [
+    { url: 'https://www.thehindu.com/news/national/feeder/default.rss', name: 'The Hindu', home: 'https://www.thehindu.com' },
+    { url: 'https://feeds.feedburner.com/ndtvnews-india-news', name: 'NDTV', home: 'https://www.ndtv.com' },
+    { url: 'https://feeds.bbci.co.uk/news/world/asia/india/rss.xml', name: 'BBC India', home: 'https://www.bbc.co.uk/news' },
+  ],
+  india: [
+    { url: 'https://www.thehindu.com/news/national/feeder/default.rss', name: 'The Hindu', home: 'https://www.thehindu.com' },
+    { url: 'https://feeds.feedburner.com/ndtvnews-india-news', name: 'NDTV', home: 'https://www.ndtv.com' },
+    { url: 'https://feeds.bbci.co.uk/news/world/asia/india/rss.xml', name: 'BBC India', home: 'https://www.bbc.co.uk/news' },
+  ],
+  world: [
+    { url: 'https://www.thehindu.com/news/international/feeder/default.rss', name: 'The Hindu', home: 'https://www.thehindu.com' },
+    { url: 'https://feeds.bbci.co.uk/news/world/rss.xml', name: 'BBC News', home: 'https://www.bbc.co.uk/news' },
+  ],
+  business: [
+    { url: 'https://www.thehindu.com/business/feeder/default.rss', name: 'The Hindu Business', home: 'https://www.thehindu.com/business' },
+    { url: 'https://feeds.feedburner.com/ndtvprofit-latest', name: 'NDTV Profit', home: 'https://www.ndtvprofit.com' },
+  ],
+  technology: [
+    { url: 'https://www.thehindu.com/sci-tech/technology/feeder/default.rss', name: 'The Hindu Tech', home: 'https://www.thehindu.com/sci-tech/technology' },
+    { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', name: 'BBC Tech', home: 'https://www.bbc.co.uk/news' },
+  ],
+  science: [
+    { url: 'https://www.thehindu.com/sci-tech/science/feeder/default.rss', name: 'The Hindu Science', home: 'https://www.thehindu.com/sci-tech/science' },
+    { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', name: 'BBC Science', home: 'https://www.bbc.co.uk/news' },
+  ],
+  health: [
+    { url: 'https://www.thehindu.com/sci-tech/health/feeder/default.rss', name: 'The Hindu Health', home: 'https://www.thehindu.com/sci-tech/health' },
+    { url: 'https://feeds.bbci.co.uk/news/health/rss.xml', name: 'BBC Health', home: 'https://www.bbc.co.uk/news' },
+  ],
+  entertainment: [
+    { url: 'https://www.thehindu.com/entertainment/feeder/default.rss', name: 'The Hindu Entertainment', home: 'https://www.thehindu.com/entertainment' },
+    { url: 'https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml', name: 'BBC Culture', home: 'https://www.bbc.co.uk/news' },
+  ],
+  sports: [
+    { url: 'https://www.thehindu.com/sport/feeder/default.rss', name: 'The Hindu Sport', home: 'https://www.thehindu.com/sport' },
+  ],
 };
 
 export const NEWS_CATEGORIES = new Set([...Object.keys(BBC_SECTION), 'sports']);
@@ -87,7 +127,6 @@ function attr(xml, name, attribute) {
 }
 
 function stripHtml(s) {
-  // block-ish tags → space; inline tags (<a>, <b>…) → nothing, so "SC</a>'s" stays "SC's"
   return decodeEntities(
     String(s || '')
       .replace(/<(?:br|\/?(?:p|div|li|ol|ul|h\d))\b[^>]*>/gi, ' ')
@@ -98,16 +137,27 @@ function stripHtml(s) {
 }
 
 export function parseRssItems(xml) {
-  return (String(xml).match(/<item[\s>][\s\S]*?<\/item>/gi) || []).map((item) => ({
-    title: tag(item, 'title'),
-    link: tag(item, 'link'),
-    guid: tag(item, 'guid'),
-    description: tag(item, 'description'),
-    pubDate: tag(item, 'pubDate'),
-    thumbnail: attr(item, 'media:thumbnail', 'url') || attr(item, 'media:content', 'url'),
-    sourceName: tag(item, 'source'),
-    sourceUrl: attr(item, 'source', 'url'),
-  }));
+  return (String(xml).match(/<item[\s>][\s\S]*?<\/item>/gi) || []).map((item) => {
+    const rawDesc = tag(item, 'description');
+    const imgInDesc = rawDesc.match(/<img\s[^>]*\bsrc=["']([^"']+)["']/i)?.[1] || '';
+    const newsImg = tag(item, 'News:Image');
+    const newsSrc = tag(item, 'News:Source');
+    return {
+      title: stripHtml(tag(item, 'title')),
+      link: tag(item, 'link'),
+      guid: tag(item, 'guid'),
+      description: stripHtml(rawDesc),
+      pubDate: tag(item, 'pubDate'),
+      thumbnail:
+        attr(item, 'media:content', 'url') ||
+        attr(item, 'media:thumbnail', 'url') ||
+        attr(item, 'enclosure', 'url') ||
+        newsImg ||
+        imgInDesc,
+      sourceName: newsSrc || tag(item, 'source'),
+      sourceUrl: attr(item, 'source', 'url'),
+    };
+  });
 }
 
 function toIso(d) {
@@ -115,9 +165,7 @@ function toIso(d) {
   return Number.isFinite(t) ? new Date(t).toISOString() : new Date().toISOString();
 }
 
-// ---------- BBC ----------
-
-function cleanBbcLink(link) {
+function cleanArticleUrl(link) {
   try {
     const u = new URL(link);
     u.searchParams.delete('at_medium');
@@ -129,30 +177,82 @@ function cleanBbcLink(link) {
   }
 }
 
+function normalizeRssFeedItems(xml, sourceName, sourceHome) {
+  return parseRssItems(xml)
+    .filter((it) => it.title && it.link)
+    .map((it) => {
+      const url = cleanArticleUrl(it.link);
+      let image = it.thumbnail || null;
+      if (image && image.includes('ichef.bbci.co.uk')) {
+        image = image.replace('/standard/240/', '/standard/800/');
+      }
+      return {
+        id: (it.guid || url).replace(/#\d+$/, ''),
+        title: it.title,
+        description: it.description,
+        url,
+        image,
+        publishedAt: toIso(it.pubDate),
+        source: { name: sourceName, url: sourceHome },
+      };
+    })
+    .filter((a) => !/\/(live|videos|audio)\//i.test(a.url));
+}
+
+// ---------- India Regional Multi-Source Fetcher ----------
+
+export async function fetchIndiaNews(pillId = 'all', max = 10) {
+  const feeds = INDIA_FEEDS[pillId] || INDIA_FEEDS.all;
+  const tasks = feeds.map((f) =>
+    fetchText(f.url, 'application/rss+xml, application/xml, text/xml').then((xml) =>
+      normalizeRssFeedItems(xml, f.name, f.home),
+    ),
+  );
+
+  if (pillId === 'sports') {
+    tasks.push(fetchEspnSportsNews(max));
+  }
+
+  const settled = await Promise.allSettled(tasks);
+  const ok = settled.filter((r) => r.status === 'fulfilled');
+  if (!ok.length) throw settled[0]?.reason || httpError(502, 'India news feeds unreachable');
+
+  // Round-robin interleave across sources (The Hindu, NDTV, BBC India) so the deck has rich variety,
+  // prioritizing items with HD images
+  const lists = ok.map((r) => r.value.slice(0, max));
+  const merged = [];
+  const seenUrl = new Set();
+  const seenTitle = new Set();
+
+  const maxLen = Math.max(...lists.map((l) => l.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const list of lists) {
+      const item = list[i];
+      if (!item) continue;
+      const tKey = item.title.toLowerCase().slice(0, 60);
+      if (seenUrl.has(item.url) || seenTitle.has(tKey)) continue;
+      seenUrl.add(item.url);
+      seenTitle.add(tKey);
+      merged.push(item);
+    }
+  }
+
+  // Prefer articles with images first while preserving recency
+  const withImg = merged.filter((a) => Boolean(a.image));
+  const pool = withImg.length >= max ? withImg : merged;
+  return pool.slice(0, max);
+}
+
+// ---------- BBC (Global Edition) ----------
+
 export async function fetchBbc(pillId = 'all', max = 10) {
   const section = BBC_SECTION[pillId] ?? '';
   const feed = section
     ? `https://feeds.bbci.co.uk/news/${section}/rss.xml`
     : 'https://feeds.bbci.co.uk/news/rss.xml';
   const xml = await fetchText(feed, 'application/rss+xml, application/xml, text/xml');
-  const all = parseRssItems(xml)
-    .filter((it) => it.title && it.link)
-    .map((it) => {
-      const url = cleanBbcLink(it.link);
-      return {
-        id: (it.guid || url).replace(/#\d+$/, ''),
-        title: it.title,
-        description: it.description,
-        url,
-        // 240px RSS thumb → same image at 800px (verified to resolve)
-        image: it.thumbnail ? it.thumbnail.replace('/standard/240/', '/standard/800/') : null,
-        publishedAt: toIso(it.pubDate),
-        source: { name: 'BBC News', url: 'https://www.bbc.co.uk/news' },
-      };
-    });
-  // live blogs / video pages extract poorly in the reader — drop them when we can spare them
-  const articles = all.filter((a) => !/\/(live|videos)\//.test(a.url));
-  return (articles.length >= max ? articles : all).slice(0, max);
+  const articles = normalizeRssFeedItems(xml, pillId === 'india' ? 'BBC India' : 'BBC News', 'https://www.bbc.co.uk/news');
+  return articles.slice(0, max);
 }
 
 // ---------- ESPN (sports tab) ----------
@@ -191,39 +291,91 @@ export async function fetchEspnSportsNews(max = 10) {
     .slice(0, max);
 }
 
-// ---------- Google News (search) ----------
+// ---------- Direct-URL Search (Bing News RSS with unwrapped publisher URLs + images + summaries) ----------
 
-export async function searchGoogleNews(q, max = 10) {
-  const params = new URLSearchParams({ q, hl: 'en-US', gl: 'US', ceid: 'US:en' });
-  const xml = await fetchText(`https://news.google.com/rss/search?${params}`, 'application/rss+xml, application/xml');
+function unwrapBingSearchUrl(rawLink) {
+  try {
+    const u = new URL(rawLink);
+    const embedded = u.searchParams.get('url');
+    if (embedded && /^https?:\/\//i.test(embedded)) return embedded;
+  } catch { /* ignore */ }
+  return rawLink;
+}
+
+function upgradeBingThumb(rawThumb) {
+  if (!rawThumb) return null;
+  const httpsUrl = String(rawThumb).replace(/^http:\/\//i, 'https://');
+  if (httpsUrl.includes('bing.com/th?')) {
+    return `${httpsUrl}&w=800&h=500&c=7`;
+  }
+  return httpsUrl;
+}
+
+export async function searchNewsArticles(q, max = 10, region = 'in') {
+  const isIndia = region !== 'global';
+  const mkt = isIndia ? 'en-IN' : 'en-US';
+  const cc = isIndia ? 'IN' : 'US';
+  const params = new URLSearchParams({ q, setmkt: mkt, cc, format: 'rss' });
+
+  try {
+    const xml = await fetchText(
+      `https://www.bing.com/news/search?${params}`,
+      'application/rss+xml, application/xml, text/xml',
+    );
+    const items = parseRssItems(xml)
+      .filter((it) => it.title && it.link)
+      .slice(0, max)
+      .map((it) => {
+        const directUrl = unwrapBingSearchUrl(it.link);
+        let hostName = '';
+        try {
+          hostName = new URL(directUrl).hostname.replace(/^www\./, '');
+        } catch { /* ignore */ }
+        const name = it.sourceName || hostName || 'Flash Search';
+        return {
+          id: `srch-${directUrl}`,
+          title: it.title,
+          description: it.description || it.title,
+          url: directUrl,
+          image: upgradeBingThumb(it.thumbnail),
+          publishedAt: toIso(it.pubDate),
+          source: { name, url: hostName ? `https://${hostName}` : null },
+          external: false,
+        };
+      });
+    if (items.length) return items;
+  } catch {
+    // Fall back to Google News RSS if Bing News RSS is unreachable
+  }
+
+  const gParams = new URLSearchParams(
+    isIndia
+      ? { q, hl: 'en-IN', gl: 'IN', ceid: 'IN:en' }
+      : { q, hl: 'en-US', gl: 'US', ceid: 'US:en' },
+  );
+  const xml = await fetchText(`https://news.google.com/rss/search?${gParams}`, 'application/rss+xml, application/xml');
   return parseRssItems(xml)
     .filter((it) => it.title && it.link)
     .slice(0, max)
     .map((it) => {
       const name = it.sourceName || 'Google News';
-      // Google appends " - Publisher" to every title
       const suffix = ` - ${name}`;
       const title = it.title.endsWith(suffix) ? it.title.slice(0, -suffix.length) : it.title;
       const desc = stripHtml(it.description);
       return {
         id: `gn-${it.guid || it.link}`,
         title,
-        // description is just an HTML link list echoing the title — only keep it if it adds something
-        description: desc && !desc.startsWith(title) ? desc : '',
+        description: desc && !desc.startsWith(title) ? desc : title,
         url: it.link,
         image: null,
         publishedAt: toIso(it.pubDate),
         source: { name, url: it.sourceUrl || null },
-        // news.google.com links are JS redirects → reader can't extract; open original instead
-        external: true,
+        external: false,
       };
     });
 }
 
 // ---------- ESPN story body (reader fast path) ----------
-// espn.com story pages are JS-rendered, so generic extraction finds nothing.
-// The same public content API that lists headlines returns the story HTML.
-// Returns the /api/article shape, or null if the URL isn't an ESPN story.
 const ESPN_STORY_RE = /^https?:\/\/(?:www\.)?espn(?:cricinfo)?\.(?:com|co\.uk|in)\/.*\/story\/_\/id\/(\d+)/i;
 
 export async function fetchEspnStory(url) {
@@ -253,11 +405,17 @@ export async function fetchEspnStory(url) {
 
 // ---------- entry point ----------
 
-export async function getNews({ category = 'all', q = '', max = 10 } = {}) {
+export async function getNews({ category = 'all', q = '', max = 10, region = 'in' } = {}) {
   const count = Math.min(20, Math.max(1, parseInt(max, 10) || 10));
   const query = String(q || '').trim().slice(0, 120);
-  if (query) return searchGoogleNews(query, count);
+  const reg = String(region || 'in').toLowerCase() === 'global' ? 'global' : 'in';
+
+  if (query) return searchNewsArticles(query, count, reg);
   const cat = NEWS_CATEGORIES.has(category) ? category : 'all';
+
+  if (cat === 'india' || reg === 'in') {
+    return fetchIndiaNews(cat, count);
+  }
   if (cat === 'sports') return fetchEspnSportsNews(count);
   return fetchBbc(cat, count);
 }

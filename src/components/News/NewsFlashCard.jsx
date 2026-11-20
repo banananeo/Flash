@@ -4,34 +4,6 @@ import { BookOpen, Clock, FlipHorizontal2, Sparkles } from 'lucide-react'
 import { categoryLabel } from '../../data/mockNews'
 import { timeAgo } from '../../hooks/useNews'
 import { useNewsStore } from '../../store/useNewsStore'
-import bookmarkIcon from '../../assets/icons/bookmark.svg'
-
-function CardBookmarkButton({ article, className = '' }) {
-  const saved = useNewsStore((s) => s.saved.some((a) => a.id === article?.id))
-  const toggleSave = useNewsStore((s) => s.toggleSave)
-
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        toggleSave(article)
-      }}
-      aria-label={saved ? 'Remove from saved' : 'Save story'}
-      aria-pressed={saved}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${saved ? 'bg-pulse text-ink shadow-sm' : 'bg-white/90 text-ink hover:bg-sage'
-        } ${className}`}
-    >
-      <img
-        src={bookmarkIcon}
-        alt=""
-        width={18}
-        height={18}
-        className={`h-[18px] w-[18px] object-contain ${saved ? 'opacity-100' : 'opacity-75'}`}
-      />
-    </button>
-  )
-}
 
 export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
   const flipped = useNewsStore((s) => s.isFlipped)
@@ -125,7 +97,6 @@ export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
                     {article.readTime}
                   </span>
                 )}
-                <CardBookmarkButton article={article} />
               </div>
             </div>
 
@@ -185,8 +156,6 @@ export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
                 {categoryLabel(article.category)}
               </span>
             </div>
-
-            <CardBookmarkButton article={article} className="bg-sage" />
           </div>
 
           {/* Headline reference + Quick-consume Summary */}

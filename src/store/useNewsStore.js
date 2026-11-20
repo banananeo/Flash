@@ -36,8 +36,18 @@ function shuffled(arr) {
 
 let newsSeq = 0
 
+function loadRegion() {
+  try {
+    const r = localStorage.getItem('flash-news-region-v1')
+    return r === 'global' ? 'global' : 'in'
+  } catch {
+    return 'in'
+  }
+}
+
 export const useNewsStore = create((set, get) => ({
   category: 'all',
+  region: loadRegion(), // 'in' (India Regional Edition) | 'global' (Global Edition)
   searchQuery: '',
   cards: MOCK_NEWS,
   topIndex: 0,
@@ -49,9 +59,18 @@ export const useNewsStore = create((set, get) => ({
   source: 'mock',
   error: null,
 
+  setRegion: (region) => {
+    const reg = region === 'global' ? 'global' : 'in'
+    try {
+      localStorage.setItem('flash-news-region-v1', reg)
+    } catch { /* ignore */ }
+    set({ region: reg, topIndex: 0, isFlipped: false, lastDir: 'right' })
+    get().fetchNews(get().category, get().searchQuery, reg)
+  },
+
   setCategory: (category) => {
     set({ category, searchQuery: '', topIndex: 0, isFlipped: false, lastDir: 'right' })
-    get().fetchNews(category, '')
+    get().fetchNews(category, '', get().region)
   },
 
   setSearchQuery: (searchQuery) => set({ searchQuery }),
@@ -59,7 +78,7 @@ export const useNewsStore = create((set, get) => ({
   searchNews: (query) => {
     const q = String(query || '').trim()
     set({ searchQuery: q, topIndex: 0, isFlipped: false, lastDir: 'right' })
-    get().fetchNews(get().category, q)
+    get().fetchNews(get().category, q, get().region)
   },
 
   toggleFlip: () => set((s) => ({ isFlipped: !s.isFlipped })),
@@ -124,13 +143,14 @@ export const useNewsStore = create((set, get) => ({
 
   isSaved: (articleId) => get().saved.some((a) => a.id === articleId),
 
-  fetchNews: async (category, query) => {
+  fetchNews: async (category, query, regionOverride) => {
     const cat = category ?? get().category
     const q = query ?? get().searchQuery
+    const reg = regionOverride ?? get().region ?? 'in'
     const mySeq = ++newsSeq
     set({ status: 'loading', error: null })
     try {
-      const { articles } = await fetchFeed(cat, 10, q)
+      const { articles } = await fetchFeed(cat, 10, q, reg)
       if (mySeq !== newsSeq) return
       if (!articles.length) throw new Error('No articles found')
       set({

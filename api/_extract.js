@@ -8,7 +8,7 @@ const MAX_PARAS = 40;
 const MAX_CHARS = 9000;
 
 const JUNK_RE =
-  /cookie|consent|subscribe|newsletter|sign up|sign in|log in|advertisement|sponsored|related articles?|read (more|also)|share (this|on)|follow us|all rights reserved|terms of (use|service)|privacy policy/i;
+  /cookie|consent|subscribe|newsletter|sign up|sign in|log in|advertisement|sponsored|related articles?|read (more|also)|also read|share (this|on)|follow us|all rights reserved|terms of (use|service)|privacy policy|account subscription benefits|premium stories, editorials|unlimited digital access/i;
 
 function metaContent(root, ...selectors) {
   for (const sel of selectors) {
@@ -21,6 +21,24 @@ function metaContent(root, ...selectors) {
 
 function cleanText(t) {
   return (t || '').replace(/\s+/g, ' ').trim();
+}
+
+function extractJsonLdArticleBody(html) {
+  const scripts = String(html || '').match(/<script\s[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  for (const s of scripts) {
+    const body = s.replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, '').trim();
+    try {
+      const parsed = JSON.parse(body);
+      const items = Array.isArray(parsed) ? parsed : parsed?.['@graph'] ? parsed['@graph'] : [parsed];
+      for (const it of items) {
+        const ab = it?.articleBody || it?.text;
+        if (typeof ab === 'string' && ab.trim().length > 160) {
+          return ab.trim();
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return '';
 }
 
 export function extractArticle(html, pageUrl) {
@@ -41,7 +59,7 @@ export function extractArticle(html, pageUrl) {
     metaContent(root, 'meta[property="og:image"]', 'meta[name="twitter:image"]') || null;
 
   // Prefer semantic containers, fall back to all <p>.
-  const scopes = ['article', 'main', '[role="main"]', '.article-body', '.post-content', '.entry-content'];
+  const scopes = ['article', '[itemprop="articleBody"]', 'main', '[role="main"]', '.article-body', '.story-content', '.post-content', '.entry-content'];
   let nodes = [];
   for (const sel of scopes) {
     const scope = root.querySelector(sel);
@@ -56,8 +74,8 @@ export function extractArticle(html, pageUrl) {
   let chars = 0;
   for (const n of nodes) {
     const t = cleanText(n.text);
-    if (t.length < 60) continue; // skip captions/nav/bylines
-    if (JUNK_RE.test(t.slice(0, 120))) continue;
+    if (t.length < 55) continue; // skip captions/nav/bylines
+    if (JUNK_RE.test(t.slice(0, 140))) continue;
     // skip paragraphs inside nav/footer/aside/forms
     let el = n.parentNode;
     let nested = false;
@@ -69,6 +87,33 @@ export function extractArticle(html, pageUrl) {
     paragraphs.push(t);
     chars += t.length;
     if (paragraphs.length >= MAX_PARAS || chars >= MAX_CHARS) break;
+  }
+
+  // Fallback to JSON-LD articleBody when DOM <p> tags yield fewer than 3 paragraphs
+  if (paragraphs.length < 3) {
+    const ldBody = extractJsonLdArticleBody(html);
+    if (ldBody) {
+      const chunks = ldBody
+        .split(/\n{2,}|\r\n\r\n|(?<=[.?!])\s+(?=[A-Z"“])/)
+        .map(cleanText)
+        .filter((p) => p.length >= 55 && !JUNK_RE.test(p.slice(0, 140)));
+      const seen = new Set(paragraphs);
+      for (const c of chunks) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        paragraphs.push(c);
+        chars += c.length;
+        if (paragraphs.length >= MAX_PARAS || chars >= MAX_CHARS) break;
+      }
+    }
+  }
+
+  // Last-resort fallback to og:description so reader never fails with an empty error
+  if (!paragraphs.length) {
+    const ogDesc = metaContent(root, 'meta[property="og:description"]', 'meta[name="description"]');
+    if (ogDesc && ogDesc.length >= 40) {
+      paragraphs.push(cleanText(ogDesc));
+    }
   }
 
   if (!paragraphs.length) {

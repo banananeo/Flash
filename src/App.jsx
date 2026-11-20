@@ -3,7 +3,6 @@ import { AnimatePresence } from 'framer-motion'
 import SplashScreen from './components/SplashScreen'
 import { TopBar, BottomNav } from './components/AppShell'
 import BriefingSection from './components/News/BriefingSection'
-import SavedSection from './components/News/SavedSection'
 import LiveScoresSection from './components/LiveScores/LiveScoresSection'
 import F1Section from './components/F1/F1Section'
 import ArticleModal from './components/ArticleModal'
@@ -65,8 +64,6 @@ export default function App() {
           <LiveScoresSection />
         ) : view === 'f1' ? (
           <F1Section />
-        ) : view === 'saved' ? (
-          <SavedSection />
         ) : (
           <BriefingSection />
         )}

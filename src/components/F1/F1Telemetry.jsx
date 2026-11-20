@@ -82,9 +82,6 @@ export default function F1Telemetry() {
       {/* Header: Grand Prix Weekend + Refresh */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
-            PIT WALL TELEMETRY · {active?.source === 'espn' ? 'ESPN LIVE TIMING' : 'ESPN + OPENF1 TELEMETRY'}
-          </p>
           <h2 className="mt-1 text-[26px] font-medium leading-tight tracking-[-0.02em] text-ink">
             {telemetry?.meetingName || 'Grand Prix Telemetry'}
           </h2>
@@ -117,11 +114,10 @@ export default function F1Telemetry() {
                 key={s.code}
                 type="button"
                 onClick={() => fetchTelemetry(s.code)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] transition-colors ${
-                  isSelected
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] transition-colors ${isSelected
                     ? 'bg-pulse font-bold text-ink'
                     : 'bg-white font-semibold text-muted ring-1 ring-hairline hover:text-ink'
-                }`}
+                  }`}
               >
                 {isLive && <span className="h-2 w-2 rounded-full bg-live" />}
                 <span>{s.name}</span>
@@ -201,9 +197,8 @@ export default function F1Telemetry() {
               key={t.id}
               type="button"
               onClick={() => setSubTab(t.id)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] transition-colors ${
-                isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] transition-colors ${isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
+                }`}
             >
               <Icon size={13} />
               <span>{t.label}</span>
@@ -247,9 +242,8 @@ export default function F1Telemetry() {
               return (
                 <div
                   key={d.num || d.acro || idx}
-                  className={`flex items-center justify-between gap-3 py-3 ${
-                    isLeader ? '-mx-2 rounded-[14px] bg-sage-leader/60 px-2' : ''
-                  }`}
+                  className={`flex items-center justify-between gap-3 py-3 ${isLeader ? '-mx-2 rounded-[14px] bg-sage-leader/60 px-2' : ''
+                    }`}
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <span className="w-6 shrink-0 font-display text-[13px] font-bold text-muted">
@@ -272,23 +266,20 @@ export default function F1Telemetry() {
                         {(d.s1 || d.s2 || d.s3) && (
                           <span className="inline-flex items-center gap-1 font-display text-[11px]">
                             <span
-                              className={`rounded px-1 ${
-                                d.purpleS1 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
-                              }`}
+                              className={`rounded px-1 ${d.purpleS1 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
+                                }`}
                             >
                               S1 {d.s1 || '–'}
                             </span>
                             <span
-                              className={`rounded px-1 ${
-                                d.purpleS2 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
-                              }`}
+                              className={`rounded px-1 ${d.purpleS2 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
+                                }`}
                             >
                               S2 {d.s2 || '–'}
                             </span>
                             <span
-                              className={`rounded px-1 ${
-                                d.purpleS3 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
-                              }`}
+                              className={`rounded px-1 ${d.purpleS3 ? 'bg-[#9333EA] font-bold text-white' : 'bg-sage text-ink'
+                                }`}
                             >
                               S3 {d.s3 || '–'}
                             </span>
@@ -376,9 +367,8 @@ export default function F1Telemetry() {
                       key={clip.id}
                       type="button"
                       onClick={() => toggleAudio(clip)}
-                      className={`flex items-center justify-between gap-3 rounded-[14px] px-3.5 py-2.5 text-left transition-colors ${
-                        isPlaying ? 'bg-pulse text-ink' : 'bg-sage hover:bg-hairline'
-                      }`}
+                      className={`flex items-center justify-between gap-3 rounded-[14px] px-3.5 py-2.5 text-left transition-colors ${isPlaying ? 'bg-pulse text-ink' : 'bg-sage hover:bg-hairline'
+                        }`}
                     >
                       <div className="flex min-w-0 items-center gap-2.5">
                         <span

@@ -28,7 +28,6 @@ const initialView = (() => {
     const v = p.get('view')
     if (v === 'scores' || p.get('scores') === '1') return 'scores'
     if (v === 'f1') return 'f1'
-    if (v === 'saved') return 'saved'
   } catch { /* ignore */ }
   return 'news'
 })()
@@ -201,7 +200,7 @@ export const useScoreStore = create((set, get) => ({
     set({ view })
     try {
       const params = new URLSearchParams(window.location.search)
-      if (view === 'scores' || view === 'f1' || view === 'saved') params.set('view', view)
+      if (view === 'scores' || view === 'f1') params.set('view', view)
       else params.delete('view')
       const qs = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))

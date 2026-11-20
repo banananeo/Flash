@@ -10,13 +10,11 @@ import bellIcon from '../assets/icons/bell.svg'
 import newsIcon from '../assets/icons/news.svg'
 import scoresIcon from '../assets/icons/scores.svg'
 import f1Icon from '../assets/icons/f1.svg'
-import savedIcon from '../assets/icons/saved.svg'
 
 const NAV_ITEMS = [
   { id: 'news', mobileLabel: 'News', desktopLabel: 'News', icon: newsIcon },
   { id: 'scores', mobileLabel: 'Scores', desktopLabel: 'Live scores', icon: scoresIcon },
   { id: 'f1', mobileLabel: 'Formula 1', desktopLabel: 'Formula 1', icon: f1Icon },
-  { id: 'saved', mobileLabel: 'Saved', desktopLabel: 'Saved', icon: savedIcon },
 ]
 
 export function TopBar() {
@@ -202,7 +200,7 @@ export function BottomNav() {
     >
       <div className="mx-auto max-w-[460px] px-6">
         <div className="h-px w-full bg-hairline" />
-        <div className="grid grid-cols-4 items-center py-2.5 pb-safe">
+        <div className="grid grid-cols-3 items-center py-2.5 pb-safe">
           {NAV_ITEMS.map((item) => {
             const active = view === item.id
             return (
