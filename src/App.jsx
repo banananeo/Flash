@@ -13,7 +13,7 @@ import { useScoreStore } from './store/useScoreStore'
 import { useNewsStore } from './store/useNewsStore'
 import { useF1Store } from './store/useF1Store'
 import { useReminderStore } from './store/useReminderStore'
-
+import { Analytics } from "@vercel/analytics/next"
 export default function App() {
   const view = useScoreStore((s) => s.view)
   const fetchBoth = useScoreStore((s) => s.fetchBoth)
