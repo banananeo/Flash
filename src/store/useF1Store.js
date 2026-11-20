@@ -6,6 +6,7 @@ import {
   deriveNextRace,
   fetchRoundResults,
   fetchRoundQualifying,
+  fetchF1Telemetry,
 } from '../lib/f1'
 import {
   MOCK_F1_DRIVERS,
@@ -45,6 +46,31 @@ export const useF1Store = create((set, get) => ({
   qualiResults: MOCK_F1_QUALI,
   resultsLoading: false,
   pendingRound: null, // latest round requested while a fetch is in flight
+
+  // ---- live & post-session telemetry (ESPN F1 + OpenF1) ----
+  telemetry: null,
+  telemetryLoading: false,
+  telemetrySession: '', // '' = auto (live or latest completed session)
+  telemetryError: null,
+
+  fetchTelemetry: async (sessionCode = '') => {
+    const code = String(sessionCode ?? get().telemetrySession ?? '').toUpperCase()
+    set({ telemetryLoading: true, telemetryError: null, ...(sessionCode !== undefined ? { telemetrySession: code } : {}) })
+    try {
+      const data = await fetchF1Telemetry(code)
+      set({
+        telemetry: data,
+        telemetryLoading: false,
+        telemetrySession: data?.activeSession?.code || code,
+        telemetryError: null,
+      })
+    } catch (e) {
+      set({
+        telemetryLoading: false,
+        telemetryError: e?.message || 'Telemetry unavailable right now',
+      })
+    }
+  },
 
   fetchF1: async () => {
     if (get().status === 'loading') return

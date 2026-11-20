@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useF1Store } from '../../store/useF1Store'
+import { TyreBadge } from './F1Telemetry'
 
 const pad2 = (n) => String(n).padStart(2, '0')
 
@@ -21,7 +22,7 @@ function fmtRaceMeta(schedule, round, circuit) {
 }
 
 // 09 · Race results — teal winner hero card + classification table
-export default function F1Results({ nextRound }) {
+export default function F1Results({ nextRound, onOpenTelemetry }) {
   const [mode, setMode] = useState('race') // race | qualifying | practice
   const schedule = useF1Store((s) => s.schedule)
   const resultsRound = useF1Store((s) => s.resultsRound)
@@ -29,6 +30,14 @@ export default function F1Results({ nextRound }) {
   const qualiResults = useF1Store((s) => s.qualiResults)
   const resultsLoading = useF1Store((s) => s.resultsLoading)
   const fetchRound = useF1Store((s) => s.fetchRound)
+  const telemetry = useF1Store((s) => s.telemetry)
+  const telemetryLoading = useF1Store((s) => s.telemetryLoading)
+  const fetchTelemetry = useF1Store((s) => s.fetchTelemetry)
+
+  const practiceSessions = (telemetry?.sessions || []).filter((s) =>
+    ['FP1', 'FP2', 'FP3'].includes(s.code),
+  )
+  const practiceDrivers = telemetry?.drivers || []
 
   const doneRounds = [...(schedule || [])]
     .filter((r) => nextRound == null || r.round < nextRound)
@@ -103,11 +112,82 @@ export default function F1Results({ nextRound }) {
           <div className="h-12 animate-pulse rounded-[12px] bg-white" />
         </div>
       ) : mode === 'practice' ? (
-        <div className="mt-6 rounded-[20px] bg-white p-6 text-center">
-          <p className="text-[16px] font-semibold text-ink">Practice timing unavailable</p>
-          <p className="mt-1.5 text-[13px] text-muted">
-            Jolpica provides official Qualifying and Race classifications. Switch tabs above to inspect session results.
-          </p>
+        <div className="mt-6 space-y-5">
+          {/* Practice session switcher (FP1 / FP2 / FP3) */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              {(practiceSessions.length ? practiceSessions : [{ code: 'FP1', name: 'Practice 1' }, { code: 'FP2', name: 'Practice 2' }, { code: 'FP3', name: 'Practice 3' }]).map((ps) => {
+                const isAct = telemetry?.activeSession?.code === ps.code
+                return (
+                  <button
+                    key={ps.code}
+                    type="button"
+                    onClick={() => fetchTelemetry(ps.code)}
+                    className={`rounded-full px-3.5 py-1 text-[12px] transition-colors ${
+                      isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
+                    }`}
+                  >
+                    {ps.name}
+                  </button>
+                )
+              })}
+            </div>
+            {onOpenTelemetry && (
+              <button
+                type="button"
+                onClick={onOpenTelemetry}
+                className="text-[12px] font-bold text-brand-strong hover:underline"
+              >
+                Open full telemetry →
+              </button>
+            )}
+          </div>
+
+          {telemetryLoading && !practiceDrivers.length ? (
+            <div className="space-y-3">
+              <div className="h-14 animate-pulse rounded-[14px] bg-white" />
+              <div className="h-14 animate-pulse rounded-[14px] bg-white" />
+            </div>
+          ) : !practiceDrivers.length ? (
+            <div className="rounded-[20px] bg-white p-6 text-center text-[13px] text-muted">
+              No practice laps recorded for this session yet.
+            </div>
+          ) : (
+            <div className="rounded-[20px] border border-hairline bg-white p-4 shadow-sm">
+              <div className="mb-2 flex items-center justify-between border-b border-hairline pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+                <span>{telemetry?.meetingName} · {telemetry?.activeSession?.name}</span>
+                <span>BEST LAP / GAP</span>
+              </div>
+              <div className="divide-y divide-hairline/80">
+                {practiceDrivers.map((d, i) => (
+                  <div key={d.num || d.acro || i} className="flex items-center justify-between gap-3 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="w-6 shrink-0 font-display text-[13px] font-medium text-muted">
+                        {pad2(d.pos || i + 1)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[14px] font-semibold text-ink">{d.name}</p>
+                          <TyreBadge compound={d.currentCompound} />
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
+                          {d.team}{d.laps ? ` · ${d.laps} laps` : ''}{d.topSpeed ? ` · ${d.topSpeed} km/h` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="font-display text-[13px] font-bold text-ink">
+                        {d.bestLapDisplay || '—'}
+                      </p>
+                      {d.gapDisplay && (
+                        <p className="font-display text-[11px] font-medium text-muted">{d.gapDisplay}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : !rows.length ? (
         <div className="mt-6 rounded-[20px] bg-white p-6 text-center text-[13px] text-muted">

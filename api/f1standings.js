@@ -5,6 +5,8 @@
 //   kind=schedule             → /ergast/f1/current/ (23-round calendar + sessions)
 //   kind=results&round=N|last → /ergast/f1/current/{N}/results/
 //   kind=qualifying&round=N|last → /ergast/f1/current/{N}/qualifying/
+//   kind=telemetry[&session=FP1|FP2|FP3|QUAL|RACE] → hybrid ESPN F1 (live) + OpenF1 Free Tier telemetry
+import { fetchF1Telemetry } from './_f1telemetry.js';
 
 const UPSTREAM = 'https://api.jolpi.ca/ergast/f1/current';
 
@@ -18,6 +20,18 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, 'http://localhost');
   const kind = url.searchParams.get('kind') || 'drivers';
+
+  if (kind === 'telemetry') {
+    const sessionCode = url.searchParams.get('session') || '';
+    try {
+      const data = await fetchF1Telemetry({ sessionCode });
+      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(502).json({ error: `F1 telemetry unreachable: ${e?.message || 'Unknown error'}` });
+    }
+  }
 
   let path = '';
   let cache = 's-maxage=3600, stale-while-revalidate=600';

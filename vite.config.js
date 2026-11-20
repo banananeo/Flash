@@ -5,6 +5,7 @@ import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail } from './api/_cricket.js'
 import { fetchEspnFootballMatches, fetchEspnFootballDetail, sanitizeDateParam } from './api/_football.js'
+import { fetchF1Telemetry } from './api/_f1telemetry.js'
 import widgetScoresHandler from './api/widget-scores.js'
 
 // Dev-only parity for Vercel's api/article.js
@@ -180,6 +181,35 @@ function newsDevMiddleware() {
   }
 }
 
+// Dev-only parity for api/f1standings.js?kind=telemetry (hybrid ESPN F1 + OpenF1 Free Tier)
+function f1TelemetryDevMiddleware() {
+  return {
+    name: 'f1-telemetry-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/f1standings', async (req, res, next) => {
+        const u = new URL(req.url, 'http://localhost')
+        if (u.searchParams.get('kind') !== 'telemetry') {
+          next()
+          return
+        }
+        const send = (status, obj) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(obj))
+        }
+        try {
+          const sessionCode = u.searchParams.get('session') || ''
+          const data = await fetchF1Telemetry({ sessionCode })
+          res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60')
+          send(200, data)
+        } catch (e) {
+          send(e?.status || 502, { error: `F1 telemetry unreachable: ${e?.message || 'Unknown error'}` })
+        }
+      })
+    },
+  }
+}
+
 // Dev-only parity for api/widget-scores.js
 function widgetScoresDevMiddleware() {
   return {
@@ -232,6 +262,7 @@ export default defineConfig(() => {
       newsDevMiddleware(),
       cricketDevMiddleware(),
       footballDevMiddleware(),
+      f1TelemetryDevMiddleware(),
       widgetScoresDevMiddleware(),
       VitePWA({
         registerType: 'autoUpdate',

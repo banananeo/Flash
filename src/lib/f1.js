@@ -305,3 +305,23 @@ export function fetchRoundQualifying(round) {
     normalizeQualifying(await fetchSameOrigin(`/api/f1standings?kind=qualifying&round=${encodeURIComponent(r)}`))
   )
 }
+
+// ---------- live & post-session telemetry (ESPN F1 + OpenF1 Free Tier) ----------
+const tmem = new Map()
+const TELEMETRY_TTL = 30 * 1000
+
+export async function fetchF1Telemetry(sessionCode = '') {
+  const key = String(sessionCode || 'auto').toUpperCase()
+  const hit = tmem.get(key)
+  if (hit && Date.now() - hit.ts < TELEMETRY_TTL) return hit.val
+  const qs = sessionCode ? `&session=${encodeURIComponent(sessionCode)}` : ''
+  const val = await fetchSameOrigin(`/api/f1standings?kind=telemetry${qs}`, { timeoutMs: 18000 })
+  if (val?.drivers?.length) {
+    tmem.set(key, { ts: Date.now(), val })
+    if (val.activeSession?.code) {
+      tmem.set(val.activeSession.code, { ts: Date.now(), val })
+    }
+  }
+  return val
+}
+
