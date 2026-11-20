@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { CATEGORIES, categoryLabel } from '../../data/mockNews'
+import { AnimatePresence } from 'framer-motion'
+import { ChevronLeft, ChevronRight, FlipHorizontal2, RefreshCw, RotateCcw, Shuffle } from 'lucide-react'
+import { CATEGORIES } from '../../data/mockNews'
 import { useNewsStore } from '../../store/useNewsStore'
 import { useScoreStore } from '../../store/useScoreStore'
 import { useF1Store } from '../../store/useF1Store'
 import { useReminderStore } from '../../store/useReminderStore'
-import { timeAgo } from '../../hooks/useNews'
-import bookmarkIcon from '../../assets/icons/bookmark.svg'
+import NewsFlashCard from './NewsFlashCard'
 
 function formatEditorialDate() {
   const d = new Date()
@@ -25,34 +25,6 @@ function formatRaceDateShort(dateUTC) {
   } catch {
     return ''
   }
-}
-
-function BookmarkButton({ article, className = '' }) {
-  const saved = useNewsStore((s) => s.saved.some((a) => a.id === article?.id))
-  const toggleSave = useNewsStore((s) => s.toggleSave)
-
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        toggleSave(article)
-      }}
-      aria-label={saved ? 'Remove from saved' : 'Save story'}
-      aria-pressed={saved}
-      className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors ${
-        saved ? 'bg-pulse' : 'hover:bg-sage'
-      } ${className}`}
-    >
-      <img
-        src={bookmarkIcon}
-        alt=""
-        width={20}
-        height={20}
-        className={`h-[20px] w-[20px] object-contain ${saved ? 'opacity-100' : 'opacity-70'}`}
-      />
-    </button>
-  )
 }
 
 function DesktopRightRail() {
@@ -196,6 +168,14 @@ export default function BriefingSection() {
   const setCategory = useNewsStore((s) => s.setCategory)
   const searchNews = useNewsStore((s) => s.searchNews)
   const cards = useNewsStore((s) => s.cards)
+  const topIndex = useNewsStore((s) => s.topIndex)
+  const isFlipped = useNewsStore((s) => s.isFlipped)
+  const toggleFlip = useNewsStore((s) => s.toggleFlip)
+  const swipe = useNewsStore((s) => s.swipe)
+  const nextCard = useNewsStore((s) => s.nextCard)
+  const prevCard = useNewsStore((s) => s.prevCard)
+  const resetDeck = useNewsStore((s) => s.resetDeck)
+  const reshuffleDeck = useNewsStore((s) => s.reshuffleDeck)
   const status = useNewsStore((s) => s.status)
   const error = useNewsStore((s) => s.error)
   const fetchNews = useNewsStore((s) => s.fetchNews)
@@ -207,8 +187,30 @@ export default function BriefingSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const hero = cards?.[0] || null
-  const rest = (cards || []).slice(1)
+  // Keyboard deck shortcuts (← prev, → next, Space flip) when no input or modal is open
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target
+      if (t && t.closest?.('input, textarea, select, button, [contenteditable="true"], [role="dialog"]')) return
+      if (document.querySelector('[role="dialog"]')) return
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        nextCard()
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        prevCard()
+      } else if (e.key === ' ') {
+        e.preventDefault()
+        toggleFlip()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [nextCard, prevCard, toggleFlip])
+
+  const total = cards?.length || 0
+  const current = cards?.[topIndex] || null
+  const progressPct = total > 0 ? Math.min(100, Math.round(((topIndex + 1) / total) * 100)) : 0
 
   return (
     <section className="mx-auto w-full max-w-[460px] px-6 pb-28 pt-2 lg:max-w-[1360px] lg:px-10 lg:pb-16 lg:pt-8">
@@ -225,11 +227,10 @@ export default function BriefingSection() {
                 <button
                   key={c.id}
                   onClick={() => setCategory(c.id)}
-                  className={`w-full rounded-[12px] px-4 py-2.5 text-left text-[14px] transition-colors ${
-                    active
+                  className={`w-full rounded-[12px] px-4 py-2.5 text-left text-[14px] transition-colors ${active
                       ? 'bg-pulse font-semibold text-ink'
                       : 'font-medium text-muted hover:bg-sage/60 hover:text-ink'
-                  }`}
+                    }`}
                 >
                   {c.label}
                 </button>
@@ -254,7 +255,7 @@ export default function BriefingSection() {
           </button>
         </aside>
 
-        {/* Center / Mobile Main Briefing Column */}
+        {/* Center / Mobile Main Briefing Column — Flash Card Deck */}
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
             {formatEditorialDate()}
@@ -263,7 +264,7 @@ export default function BriefingSection() {
             Your daily edge.
           </h1>
           <p className="mt-1.5 hidden text-[14px] font-normal text-muted lg:block">
-            The stories that matter. Without the noise.
+            Tap any flash card to flip for the summary, or open the full story.
           </p>
 
           {searchQuery && (
@@ -289,11 +290,10 @@ export default function BriefingSection() {
                 <button
                   key={c.id}
                   onClick={() => setCategory(c.id)}
-                  className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] transition-colors ${
-                    active
+                  className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] transition-colors ${active
                       ? 'bg-pulse font-semibold text-ink'
                       : 'bg-sage font-medium text-muted hover:text-ink'
-                  }`}
+                    }`}
                 >
                   {c.label}
                 </button>
@@ -313,88 +313,135 @@ export default function BriefingSection() {
             </div>
           )}
 
-          {status === 'loading' && !cards?.length ? (
-            <div className="mt-6 space-y-5">
-              <div className="h-[220px] animate-pulse rounded-[18px] bg-sage lg:h-[300px]" />
-              <div className="h-8 w-3/4 animate-pulse rounded bg-sage" />
-              <div className="h-4 w-full animate-pulse rounded bg-sage" />
-            </div>
-          ) : (
-            <>
-              {/* Hero Big Read Card */}
-              {hero && (
-                <motion.article
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  onClick={() => openReader(hero)}
-                  className="group mt-6 cursor-pointer"
-                >
-                  <div className="relative overflow-hidden rounded-[18px] bg-sage">
-                    <img
-                      src={hero.image}
-                      alt={hero.title}
-                      className="h-[220px] w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] lg:h-[320px]"
-                    />
-                    <span className="absolute left-3.5 top-3.5 rounded-full bg-pulse px-3 py-1 text-[10px] font-bold uppercase tracking-[0.06em] text-ink">
-                      THE BIG READ
-                    </span>
-                  </div>
-
-                  <h2 className="mt-4 text-[25px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink lg:text-[32px]">
-                    {hero.title}
-                  </h2>
-
-                  {hero.summary && (
-                    <p className="mt-2.5 line-clamp-3 text-[14px] leading-[1.55] text-muted lg:text-[15px]">
-                      {hero.summary}
-                    </p>
-                  )}
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <p className="truncate text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-                      {hero.source} · {hero.readTime || '4 MIN READ'}
-                    </p>
-                    <BookmarkButton article={hero} />
-                  </div>
-                </motion.article>
-              )}
-
-              <div className="my-5 h-px w-full bg-hairline" />
-
-              {/* Compact Editorial Story List (1 col on mobile, 2 cols on desktop) */}
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-6">
-                {rest.map((article) => (
-                  <article
-                    key={article.id}
-                    onClick={() => openReader(article)}
-                    className="group flex cursor-pointer items-start gap-3.5"
+          {/* Flash Card Deck Area */}
+          <div className="mx-auto mt-5 max-w-[540px]">
+            {status === 'loading' && !total ? (
+              <div className="h-[460px] animate-pulse rounded-[22px] bg-sage sm:h-[500px]" />
+            ) : !current ? (
+              <div className="flex h-[420px] flex-col items-center justify-center rounded-[22px] border border-hairline bg-white p-8 text-center shadow-sm">
+                <span className="rounded-full bg-sage-leader px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
+                  ALL CAUGHT UP
+                </span>
+                <h2 className="mt-3 text-[24px] font-semibold leading-tight text-ink">
+                  You’ve flipped through every card.
+                </h2>
+                <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted">
+                  Replay this deck, shuffle the order, or pull fresh headlines.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={resetDeck}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-pulse px-5 py-2.5 text-[13px] font-bold text-ink"
                   >
-                    <img
-                      src={article.image}
-                      alt=""
-                      loading="lazy"
-                      className="h-[82px] w-[82px] shrink-0 rounded-[14px] bg-sage object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-                          {categoryLabel(article.category)}
-                        </p>
-                        <BookmarkButton article={article} className="-mt-1 h-7 w-7" />
-                      </div>
-                      <h3 className="mt-0.5 line-clamp-2 text-[15px] font-semibold leading-[1.3] text-ink group-hover:underline">
-                        {article.title}
-                      </h3>
-                      <p className="mt-2 text-[11px] font-medium text-muted">
-                        {timeAgo(article.publishedAt)} · {article.readTime || '3 min read'}
-                      </p>
-                    </div>
-                  </article>
-                ))}
+                    <RotateCcw size={15} />
+                    Start over
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reshuffleDeck}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-sage px-4 py-2.5 text-[13px] font-semibold text-ink hover:bg-hairline"
+                  >
+                    <Shuffle size={15} />
+                    Shuffle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fetchNews(category, searchQuery)}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-sage px-4 py-2.5 text-[13px] font-semibold text-ink hover:bg-hairline"
+                  >
+                    <RefreshCw size={15} />
+                    Refresh
+                  </button>
+                </div>
               </div>
-            </>
-          )}
+            ) : (
+              <>
+                {/* Progress & Deck Utilities */}
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                    Card {topIndex + 1} of {total}
+                  </span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-sage">
+                    <div
+                      className="h-full rounded-full bg-pulse transition-all duration-300"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={reshuffleDeck}
+                      title="Shuffle deck"
+                      aria-label="Shuffle deck"
+                      className="grid h-8 w-8 place-items-center rounded-full bg-sage text-muted transition-colors hover:text-ink"
+                    >
+                      <Shuffle size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fetchNews(category, searchQuery)}
+                      title="Refresh stories"
+                      aria-label="Refresh stories"
+                      className="grid h-8 w-8 place-items-center rounded-full bg-sage text-muted transition-colors hover:text-ink"
+                    >
+                      <RefreshCw size={14} className={status === 'loading' ? 'animate-spin' : ''} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3D Flippable Flash Card Container */}
+                <div className="relative h-[465px] w-full sm:h-[510px]">
+                  {/* Subtle stacked card backdrop */}
+                  {topIndex + 1 < total && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-3 -bottom-2.5 top-3 rounded-[22px] border border-hairline bg-white/70 shadow-sm"
+                    />
+                  )}
+                  <AnimatePresence mode="popLayout">
+                    <NewsFlashCard
+                      key={current.id || current.url || topIndex}
+                      article={current}
+                      onSwipe={swipe}
+                      onReadFull={openReader}
+                    />
+                  </AnimatePresence>
+                </div>
+
+                {/* Deck Navigation Bar */}
+                <div className="mt-5 flex items-center justify-between gap-2.5">
+                  <button
+                    type="button"
+                    onClick={prevCard}
+                    disabled={topIndex === 0}
+                    className="inline-flex h-[42px] items-center gap-1.5 rounded-full bg-sage px-4 text-[13px] font-semibold text-ink transition-opacity disabled:opacity-40"
+                  >
+                    <ChevronLeft size={16} />
+                    Prev
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleFlip}
+                    className="inline-flex h-[42px] flex-1 items-center justify-center gap-2 rounded-full bg-white px-5 text-[13px] font-bold text-ink shadow-sm ring-1 ring-hairline transition-colors hover:bg-sage"
+                  >
+                    <FlipHorizontal2 size={16} className="text-brand-strong" />
+                    {isFlipped ? 'Show Front' : 'Flip for Summary'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={nextCard}
+                    className="inline-flex h-[42px] items-center gap-1.5 rounded-full bg-pulse px-4 text-[13px] font-bold text-ink transition-opacity hover:opacity-90"
+                  >
+                    Next
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Desktop Right Rail */}

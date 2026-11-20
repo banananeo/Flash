@@ -34,10 +34,6 @@ export default function F1Section() {
 
   return (
     <section className="mx-auto w-full max-w-[460px] px-6 pb-28 pt-2 lg:max-w-[780px] lg:pt-8">
-      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-        EVERY SECOND COUNTS
-      </p>
-
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
         <h1 className="text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-ink">
           Formula 1.
@@ -60,9 +56,8 @@ export default function F1Section() {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-full py-2 text-[13px] transition-colors ${
-                active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
-              }`}
+              className={`rounded-full py-2 text-[13px] transition-colors ${active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
+                }`}
             >
               {t.label}
             </button>

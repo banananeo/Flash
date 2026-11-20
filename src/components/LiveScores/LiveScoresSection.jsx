@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import MatchCard from './MatchCard'
+import ScorePreferencesBar from './ScorePreferencesBar'
 import { fetchCricketDetail } from '../../lib/cricket'
 import {
   useScoreStore,
   isFavMatch,
-  normalizeTeam,
+  isFavLeagueMatch,
+  pickLiveOrNextForSelections,
+  teamMatchesName,
   todayISO,
   shiftISO,
 } from '../../store/useScoreStore'
@@ -26,11 +29,17 @@ function formatPillDate(isoStr) {
   return `${wk} ${dd}`
 }
 
-function FootballHeroCard({ match, onOpen }) {
+function FootballHeroCard({ match, onOpen, isFav, onToggleFav }) {
   if (!match) return null
   const isLive = match.status === 'live'
+  const isScheduled = match.status === 'scheduled'
   const homeScorers = (match.teamA?.scorers || []).join(', ')
   const awayScorers = (match.teamB?.scorers || []).join(', ')
+  const badgeLabel = isLive
+    ? 'LIVE'
+    : isScheduled
+      ? `NEXT MATCH · ${match.kickoffLabel || match.minute}`
+      : match.minute
 
   return (
     <motion.div
@@ -51,16 +60,35 @@ function FootballHeroCard({ match, onOpen }) {
         <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
           {match.leagueName || match.league}
         </span>
-        {isLive ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
-            <span className="h-1.5 w-1.5 rounded-full bg-white" />
-            LIVE
-          </span>
-        ) : (
-          <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            {match.minute}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {isLive ? (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
+              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              LIVE
+            </span>
+          ) : isScheduled ? (
+            <span className="rounded-full bg-sage-leader px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-strong">
+              {badgeLabel}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+              {badgeLabel}
+            </span>
+          )}
+          {onToggleFav && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFav()
+              }}
+              aria-label={isFav ? 'Unfollow team' : 'Follow team'}
+              className={`text-[15px] leading-none ${isFav ? 'text-ink' : 'text-hairline hover:text-muted'}`}
+            >
+              ★
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 flex items-center justify-between gap-3">
@@ -76,7 +104,7 @@ function FootballHeroCard({ match, onOpen }) {
       </div>
 
       <p className="mt-2.5 text-center text-[13px] font-bold text-brand-strong">
-        {match.minute}
+        {isScheduled ? match.kickoffLabel || match.minute : match.minute}
       </p>
 
       <div className="mt-4 h-[2px] w-full overflow-hidden rounded-full bg-sage">
@@ -96,9 +124,10 @@ function FootballHeroCard({ match, onOpen }) {
   )
 }
 
-function CricketHeroCard({ match, onOpen }) {
+function CricketHeroCard({ match, onOpen, isFav, onToggleFav }) {
   if (!match) return null
   const isLive = match.status === 'live'
+  const isScheduled = match.status === 'scheduled'
 
   return (
     <motion.div
@@ -119,16 +148,35 @@ function CricketHeroCard({ match, onOpen }) {
         <span className="min-w-0 truncate text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
           {match.league || match.leagueName}
         </span>
-        {isLive ? (
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
-            <span className="h-1.5 w-1.5 rounded-full bg-white" />
-            LIVE
-          </span>
-        ) : (
-          <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            {match.status === 'scheduled' ? 'SCHED' : 'FT'}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {isLive ? (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
+              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              LIVE
+            </span>
+          ) : isScheduled ? (
+            <span className="rounded-full bg-sage-leader px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-brand-strong">
+              NEXT MATCH{match.kickoffLabel ? ` · ${match.kickoffLabel}` : ''}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+              FT
+            </span>
+          )}
+          {onToggleFav && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFav()
+              }}
+              aria-label={isFav ? 'Unfollow team' : 'Follow team'}
+              className={`text-[15px] leading-none ${isFav ? 'text-ink' : 'text-hairline hover:text-muted'}`}
+            >
+              ★
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-5 flex items-baseline justify-between gap-3">
@@ -219,12 +267,14 @@ function AtTheCreaseCard({ match, detail }) {
   )
 }
 
-// 05 · Live scores (Football) & 12 · Live cricket + Following
+// 05 · Live scores (Football) & 12 · Live cricket + Following (Leagues & Teams Live / Next Match)
 export default function LiveScoresSection() {
   const sport = useScoreStore((s) => s.sport)
   const setSport = useScoreStore((s) => s.setSport)
   const selectedDate = useScoreStore((s) => s.selectedDate)
   const setSelectedDate = useScoreStore((s) => s.setSelectedDate)
+  const activeLeague = useScoreStore((s) => s.activeLeague)
+  const setActiveLeague = useScoreStore((s) => s.setActiveLeague)
   const football = useScoreStore((s) => s.football)
   const cricket = useScoreStore((s) => s.cricket)
   const status = useScoreStore((s) => s.status)
@@ -232,6 +282,7 @@ export default function LiveScoresSection() {
   const fetchScores = useScoreStore((s) => s.fetchScores)
   const openMatch = useScoreStore((s) => s.openMatch)
   const favTeams = useScoreStore((s) => s.favTeams)
+  const favLeagues = useScoreStore((s) => s.favLeagues)
   const toggleFav = useScoreStore((s) => s.toggleFav)
 
   const [featuredCricketDetail, setFeaturedCricketDetail] = useState(null)
@@ -243,21 +294,60 @@ export default function LiveScoresSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sport, selectedDate])
 
-  const allMatches =
-    sport === 'football'
-      ? football || []
-      : sport === 'cricket'
-        ? cricket || []
-        : [...(football || []), ...(cricket || [])].filter((m) => isFavMatch(m, favTeams))
+  const sportPool = useMemo(() => {
+    if (sport === 'football') return football || []
+    if (sport === 'cricket') return cricket || []
+    return [...(football || []), ...(cricket || [])]
+  }, [sport, football, cricket])
+
+  // "Your Chosen Leagues & Teams — Live & Next Match" spotlight cards
+  const personalLiveOrNext = useMemo(
+    () => pickLiveOrNextForSelections(sportPool, favTeams, favLeagues),
+    [sportPool, favTeams, favLeagues],
+  )
+
+  // Main matches list for current tab & league filter
+  const { allMatches, isShowingUpcomingLookahead } = useMemo(() => {
+    if (sport === 'following') {
+      return { allMatches: personalLiveOrNext, isShowingUpcomingLookahead: true }
+    }
+
+    let pool = sportPool
+    if (activeLeague && activeLeague !== 'all') {
+      pool = pool.filter((m) => isFavLeagueMatch(m, [activeLeague]))
+    }
+
+    // If viewing today without a specific league filter, prefer today's/live matches first;
+    // if a chosen league has no match today, automatically surface its upcoming next matches!
+    if (selectedDate === todayISO()) {
+      const todayOrLive = pool.filter(
+        (m) => m.status === 'live' || !m.dateISO || m.dateISO === todayISO(),
+      )
+      if (todayOrLive.length > 0 && activeLeague === 'all') {
+        return { allMatches: todayOrLive, isShowingUpcomingLookahead: false }
+      }
+      return {
+        allMatches: pool,
+        isShowingUpcomingLookahead: todayOrLive.length === 0 && pool.length > 0,
+      }
+    }
+
+    return { allMatches: pool, isShowingUpcomingLookahead: false }
+  }, [sport, sportPool, activeLeague, selectedDate, personalLiveOrNext])
 
   const featured =
-    allMatches.find((m) => m.status === 'live') || allMatches[0] || null
+    allMatches.find((m) => m.status === 'live' && isFavMatch(m, favTeams)) ||
+    allMatches.find((m) => m.status === 'live') ||
+    allMatches.find((m) => isFavMatch(m, favTeams)) ||
+    allMatches[0] ||
+    null
+
   const remaining = featured ? allMatches.filter((m) => m.id !== featured.id) : []
   const liveCount = allMatches.filter((m) => m.status === 'live').length
 
-  // Load live "At the crease" batters for featured cricket match (12 · Live cricket)
+  // Load live "At the crease" batters for featured cricket match
   useEffect(() => {
-    if (sport !== 'cricket' || !featured?.rawId) {
+    if (featured?.sport !== 'cricket' || !featured?.rawId) {
       setFeaturedCricketDetail(null)
       return
     }
@@ -272,46 +362,58 @@ export default function LiveScoresSection() {
     return () => {
       alive = false
     }
-  }, [sport, featured?.rawId, featured?.seriesId])
+  }, [featured?.sport, featured?.rawId, featured?.seriesId])
 
   const prevDate = shiftISO(selectedDate, -1)
   const nextDate = shiftISO(selectedDate, 1)
 
   const toggleMatchFav = (m) => {
-    const favSet = new Set((favTeams || []).map(normalizeTeam))
-    if (favSet.has(normalizeTeam(m?.teamA?.name))) toggleFav(m.teamA.name)
-    else if (favSet.has(normalizeTeam(m?.teamB?.name))) toggleFav(m.teamB.name)
+    const aFav = (favTeams || []).some((t) => teamMatchesName(m?.teamA?.name, t))
+    const bFav = (favTeams || []).some((t) => teamMatchesName(m?.teamB?.name, t))
+    if (aFav) toggleFav(m.teamA.name)
+    else if (bFav) toggleFav(m.teamB.name)
     else toggleFav(m?.teamA?.name)
   }
 
+  const hasSelections = (favTeams?.length || 0) + (favLeagues?.length || 0) > 0
+
   return (
     <section className="mx-auto w-full max-w-[460px] px-6 pb-28 pt-2 lg:max-w-[780px] lg:pt-8">
-      <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-        DON’T MISS A MOMENT
-      </p>
+
       <h1 className="mt-1.5 text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-ink">
-        The live pulse.
+        Live Scores
       </h1>
 
       {/* Sport Pills: Football | Cricket | Following */}
       <div className="mt-5 flex items-center gap-2">
         {SPORT_TABS.map((t) => {
           const active = sport === t.id
+          const countBadge =
+            t.id === 'following' && hasSelections
+              ? (favTeams?.length || 0) + (favLeagues?.length || 0)
+              : 0
           return (
             <button
               key={t.id}
               onClick={() => setSport(t.id)}
-              className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
-                active ? 'bg-pulse font-semibold text-ink' : 'bg-sage font-medium text-muted hover:text-ink'
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[13px] transition-colors ${active ? 'bg-pulse font-semibold text-ink' : 'bg-sage font-medium text-muted hover:text-ink'
+                }`}
             >
-              {t.label}
+              <span>{t.label}</span>
+              {countBadge > 0 && (
+                <span className="rounded-full bg-white/80 px-1.5 py-0.2 text-[10px] font-bold text-ink">
+                  {countBadge}
+                </span>
+              )}
             </button>
           )
         })}
       </div>
 
-      {/* Date Switcher (‹ Sat 05 | Today, 06 Jul | Mon 07 ›) */}
+      {/* League Pills & "Choose Leagues & Teams" Picker */}
+      <ScorePreferencesBar defaultOpen={sport === 'following' && !hasSelections} />
+
+      {/* Date Switcher */}
       <div className="mt-5 flex items-center justify-between gap-2">
         <button
           type="button"
@@ -364,7 +466,42 @@ export default function LiveScoresSection() {
         </div>
       )}
 
-      {/* Content */}
+      {/* Dedicated Spotlight: Your Chosen Leagues & Teams (Live Score or Next Match) */}
+      {sport !== 'following' && activeLeague === 'all' && personalLiveOrNext.length > 0 && (
+        <div className="mt-6 rounded-[20px] bg-sage/80 p-4 sm:p-5">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
+                YOUR LEAGUES & TEAMS
+              </p>
+              <h2 className="text-[18px] font-semibold text-ink">
+                Live scores & next matches
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSport('following')}
+              className="text-[12px] font-semibold text-brand-strong hover:underline"
+            >
+              View all ({personalLiveOrNext.length}) →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {personalLiveOrNext.slice(0, 4).map((m) => (
+              <MatchCard
+                key={`pick-${m.id}`}
+                match={m}
+                showLeagueBadge
+                isFav={isFavMatch(m, favTeams)}
+                onToggleFav={() => toggleMatchFav(m)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
       <div className="mt-5">
         {status === 'loading' && !allMatches.length ? (
           <div className="space-y-4">
@@ -374,33 +511,68 @@ export default function LiveScoresSection() {
           </div>
         ) : sport === 'following' && !allMatches.length ? (
           <div className="rounded-[20px] bg-white p-8 text-center">
-            <p className="text-[18px] font-semibold text-ink">No followed matches today.</p>
+            <p className="text-[18px] font-semibold text-ink">
+              {hasSelections
+                ? 'No live or upcoming fixtures found for your picks.'
+                : 'Choose your favourite leagues & teams above.'}
+            </p>
             <p className="mt-1.5 text-[13px] text-muted">
-              Tap the ★ on any football or cricket fixture to follow that team here.
+              Pick any league or team in the selector above (or tap ★ on any match) to track their live score and next match here.
             </p>
             <button
               type="button"
               onClick={() => setSport('football')}
               className="mt-5 rounded-full bg-pulse px-5 py-2.5 text-[13px] font-bold text-ink"
             >
-              Browse live scores
+              Browse all fixtures
             </button>
           </div>
         ) : !allMatches.length ? (
           <div className="rounded-[20px] bg-white p-8 text-center">
-            <p className="text-[17px] font-semibold text-ink">No fixtures listed for this date.</p>
-            <p className="mt-1 text-[13px] text-muted">Try switching to an adjacent day above.</p>
+            <p className="text-[17px] font-semibold text-ink">
+              No fixtures listed for {activeLeague !== 'all' ? activeLeague : 'this date'}.
+            </p>
+            <p className="mt-1 text-[13px] text-muted">
+              {activeLeague !== 'all'
+                ? 'Try switching back to All Leagues or another day.'
+                : 'Try switching to an adjacent day above.'}
+            </p>
+            {activeLeague !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setActiveLeague('all')}
+                className="mt-4 rounded-full bg-pulse px-4 py-2 text-[12px] font-bold text-ink"
+              >
+                Show all leagues
+              </button>
+            )}
           </div>
         ) : (
           <>
+            {isShowingUpcomingLookahead && (
+              <div className="mb-3 rounded-[14px] bg-sage-leader/70 px-4 py-2 text-[12px] font-semibold text-brand-strong">
+                No match today for {activeLeague !== 'all' ? activeLeague : 'your selection'} — showing next upcoming fixtures.
+              </div>
+            )}
+
             {/* Featured Hero Card */}
             {featured?.sport === 'cricket' ? (
               <>
-                <CricketHeroCard match={featured} onOpen={openMatch} />
+                <CricketHeroCard
+                  match={featured}
+                  onOpen={openMatch}
+                  isFav={isFavMatch(featured, favTeams)}
+                  onToggleFav={() => toggleMatchFav(featured)}
+                />
                 <AtTheCreaseCard match={featured} detail={featuredCricketDetail} />
               </>
             ) : (
-              <FootballHeroCard match={featured} onOpen={openMatch} />
+              <FootballHeroCard
+                match={featured}
+                onOpen={openMatch}
+                isFav={isFavMatch(featured, favTeams)}
+                onToggleFav={() => toggleMatchFav(featured)}
+              />
             )}
 
             {/* Remaining Fixtures ("Around the grounds") */}
@@ -408,7 +580,11 @@ export default function LiveScoresSection() {
               <div className="mt-7">
                 <div className="mb-3 flex items-baseline justify-between">
                   <h2 className="text-[20px] font-semibold text-ink">
-                    Around the grounds
+                    {sport === 'following'
+                      ? 'Your live & upcoming schedule'
+                      : activeLeague !== 'all'
+                        ? activeLeague
+                        : 'Around the grounds'}
                   </h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
                     {liveCount > 0 ? `${liveCount} LIVE` : `${remaining.length} MATCHES`}
@@ -420,6 +596,7 @@ export default function LiveScoresSection() {
                     <MatchCard
                       key={m.id}
                       match={m}
+                      showLeagueBadge={sport === 'following' || activeLeague === 'all'}
                       isFav={isFavMatch(m, favTeams)}
                       onToggleFav={() => toggleMatchFav(m)}
                     />

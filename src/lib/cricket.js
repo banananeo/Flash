@@ -19,7 +19,7 @@ function friendlyCricketError(e) {
 
 export async function fetchCricketLive(dateStr = '') {
   const cleanDate = String(dateStr || '').replace(/-/g, '');
-  const cacheKey = `live-cache-cricket-${cleanDate || 'today'}`;
+  const cacheKey = `live-cache-cricket-v2-${cleanDate || 'today'}`;
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
     if (

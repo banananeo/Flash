@@ -60,12 +60,140 @@ function saveJSON(key, value) {
 }
 
 export const normalizeTeam = (name) => String(name || '').trim().toLowerCase()
+export const normalizeLeague = (name) => String(name || '').trim().toLowerCase()
+
+const TEAM_ALIASES = {
+  'man city': 'manchester city',
+  'manchester city': 'man city',
+  'man utd': 'manchester united',
+  'man united': 'manchester united',
+  'manchester united': 'man utd',
+  psg: 'paris saint-germain',
+  'paris saint-germain': 'psg',
+  inter: 'internazionale',
+  internazionale: 'inter',
+  'inter milan': 'internazionale',
+  bayern: 'bayern munich',
+  'bayern munich': 'fc bayern munich',
+  barca: 'barcelona',
+  spurs: 'tottenham hotspur',
+  tottenham: 'tottenham hotspur',
+}
+
+export function teamMatchesName(candidate, followed) {
+  const a = normalizeTeam(candidate)
+  const b = normalizeTeam(followed)
+  if (!a || !b) return false
+  if (a === b) return true
+  if (TEAM_ALIASES[a] === b || TEAM_ALIASES[b] === a) return true
+  if (b.length >= 4 && (a.includes(b) || b.includes(a))) return true
+  return false
+}
 
 export function isFavMatch(match, favTeams) {
-  if (!favTeams?.length) return false
-  const set = new Set(favTeams.map(normalizeTeam))
-  return set.has(normalizeTeam(match?.teamA?.name)) || set.has(normalizeTeam(match?.teamB?.name))
+  if (!favTeams?.length || !match) return false
+  const nameA = match.teamA?.name || ''
+  const nameB = match.teamB?.name || ''
+  return favTeams.some((fav) => teamMatchesName(nameA, fav) || teamMatchesName(nameB, fav))
 }
+
+export function isFavLeagueMatch(match, favLeagues) {
+  if (!favLeagues?.length || !match) return false
+  const lg = normalizeLeague(match.leagueName || match.league)
+  if (!lg) return false
+  return favLeagues.some((fav) => {
+    const f = normalizeLeague(fav)
+    return f && (lg === f || lg.includes(f) || f.includes(lg))
+  })
+}
+
+// Given a pool of matches (including multi-day upcoming lookahead), returns the
+// best "Live or Next Match" cards for the user's chosen teams and leagues.
+export function pickLiveOrNextForSelections(matches, favTeams = [], favLeagues = []) {
+  const list = Array.isArray(matches) ? matches : []
+  if (!favTeams.length && !favLeagues.length) return []
+
+  const pickedIds = new Set()
+  const out = []
+
+  // 1) For each followed team, pick its LIVE match if playing now, otherwise its earliest scheduled NEXT match (or latest FT if none scheduled)
+  for (const team of favTeams) {
+    const teamMatches = list.filter(
+      (m) => teamMatchesName(m?.teamA?.name, team) || teamMatchesName(m?.teamB?.name, team),
+    )
+    if (!teamMatches.length) continue
+    const live = teamMatches.find((m) => m.status === 'live')
+    const nextSched = teamMatches
+      .filter((m) => m.status === 'scheduled')
+      .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')))[0]
+    const chosen = live || nextSched || teamMatches[0]
+    if (chosen && !pickedIds.has(chosen.id)) {
+      pickedIds.add(chosen.id)
+      out.push(chosen)
+    }
+  }
+
+  // 2) For each followed league, include all LIVE matches + the next upcoming matches (up to 4 per league so it stays scannable)
+  for (const league of favLeagues) {
+    const lgMatches = list.filter((m) => isFavLeagueMatch(m, [league]))
+    if (!lgMatches.length) continue
+    const live = lgMatches.filter((m) => m.status === 'live')
+    const upcoming = lgMatches
+      .filter((m) => m.status === 'scheduled')
+      .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')))
+    const toAdd = live.length ? [...live, ...upcoming.slice(0, 2)] : upcoming.slice(0, 4)
+    const fallback = toAdd.length ? toAdd : lgMatches.slice(0, 2)
+    for (const m of fallback) {
+      if (m && !pickedIds.has(m.id)) {
+        pickedIds.add(m.id)
+        out.push(m)
+      }
+    }
+  }
+
+  const statusRank = (s) => (s === 'live' ? 0 : s === 'scheduled' ? 1 : 2)
+  return out.sort((a, b) => {
+    const sr = statusRank(a.status) - statusRank(b.status)
+    if (sr !== 0) return sr
+    return String(a.time || '').localeCompare(String(b.time || ''))
+  })
+}
+
+export const POPULAR_FOOTBALL_LEAGUES = [
+  'English Premier League',
+  'UEFA Champions League',
+  'Spanish LALIGA',
+  'Italian Serie A',
+  'German Bundesliga',
+  'French Ligue 1',
+  'UEFA Europa League',
+  'Indian Super League',
+  'MLS',
+]
+
+export const POPULAR_FOOTBALL_TEAMS = [
+  'Arsenal',
+  'Liverpool',
+  'Manchester City',
+  'Chelsea',
+  'Manchester United',
+  'Real Madrid',
+  'Barcelona',
+  'Bayern Munich',
+  'Inter',
+  'PSG',
+]
+
+export const POPULAR_CRICKET_TEAMS = [
+  'India',
+  'Australia',
+  'England',
+  'South Africa',
+  'New Zealand',
+  'Pakistan',
+  'Sri Lanka',
+  'West Indies',
+]
 
 export const useScoreStore = create((set, get) => ({
   view: initialView,
@@ -83,6 +211,7 @@ export const useScoreStore = create((set, get) => ({
 
   sport: initialSport, // football | cricket | following
   selectedDate: todayISO(),
+  activeLeague: 'all', // 'all' | specific leagueName
   football: MOCK_FOOTBALL,
   cricket: MOCK_CRICKET,
   status: 'mock', // mock | loading | live | error
@@ -91,7 +220,10 @@ export const useScoreStore = create((set, get) => ({
   source: { football: 'mock', cricket: 'mock' },
 
   favTeams: loadJSON('flash-favs-v1', []),
+  favLeagues: loadJSON('flash-fav-leagues-v1', []),
   f1Favs: loadJSON('flash-f1favs-v1', []),
+
+  setActiveLeague: (activeLeague) => set({ activeLeague: activeLeague || 'all' }),
 
   toggleF1Fav: (acro) => {
     const norm = String(acro || '').trim().toUpperCase()
@@ -116,8 +248,26 @@ export const useScoreStore = create((set, get) => ({
     saveJSON('flash-favs-v1', next)
   },
 
+  toggleFavLeague: (leagueName) => {
+    const norm = normalizeLeague(leagueName)
+    if (!norm) return
+    const current = get().favLeagues || []
+    const exists = current.some((l) => normalizeLeague(l) === norm)
+    const next = exists
+      ? current.filter((l) => normalizeLeague(l) !== norm)
+      : [...current, String(leagueName).trim()]
+    set({ favLeagues: next })
+    saveJSON('flash-fav-leagues-v1', next)
+  },
+
+  clearSelections: () => {
+    set({ favTeams: [], favLeagues: [], activeLeague: 'all' })
+    saveJSON('flash-favs-v1', [])
+    saveJSON('flash-fav-leagues-v1', [])
+  },
+
   setSport: (sport) => {
-    set({ sport })
+    set({ sport, activeLeague: 'all' })
     if (sport === 'following') {
       get().fetchBoth()
     } else {

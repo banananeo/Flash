@@ -1,12 +1,22 @@
-import { useScoreStore } from '../../store/useScoreStore'
+import { useScoreStore, todayISO } from '../../store/useScoreStore'
 
-// Clean white rounded editorial match row ("Around the grounds").
-export default function MatchCard({ match, isFav = false, onToggleFav }) {
+// Clean white rounded editorial match row ("Around the grounds" & "Your Leagues & Teams").
+export default function MatchCard({ match, isFav = false, onToggleFav, showLeagueBadge = false }) {
   const openMatch = useScoreStore((s) => s.openMatch)
   if (!match?.teamA || !match?.teamB) return null
 
   const isLive = match.status === 'live'
+  const isScheduled = match.status === 'scheduled'
   const isFootball = match.sport === 'football'
+  const isFutureDay = Boolean(match.dateISO && match.dateISO > todayISO())
+
+  const timeBadge = isLive
+    ? isFootball
+      ? match.minute
+      : 'LIVE'
+    : isScheduled
+      ? match.kickoffLabel || (isFootball ? match.minute : 'NEXT')
+      : 'FT'
 
   return (
     <div
@@ -23,6 +33,19 @@ export default function MatchCard({ match, isFav = false, onToggleFav }) {
       className="flex w-full cursor-pointer items-center gap-4 rounded-[16px] bg-white px-5 py-4 text-left transition-colors hover:bg-white/80 active:scale-[0.99]"
     >
       <div className="min-w-0 flex-1 space-y-2.5">
+        {(showLeagueBadge || isFutureDay) && (
+          <div className="flex items-center gap-2">
+            <span className="truncate text-[10px] font-bold uppercase tracking-[0.07em] text-muted">
+              {match.leagueName || match.league}
+            </span>
+            {isScheduled && (
+              <span className="shrink-0 rounded-full bg-sage-leader px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-brand-strong">
+                NEXT MATCH
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             {match.teamA.logo && (
@@ -72,11 +95,11 @@ export default function MatchCard({ match, isFav = false, onToggleFav }) {
         {isLive ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[11px] font-bold text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-white" />
-            {isFootball ? match.minute : 'LIVE'}
+            {timeBadge}
           </span>
         ) : (
-          <span className="text-[12px] font-semibold text-muted">
-            {isFootball ? match.minute : match.status === 'scheduled' ? 'SCHED' : 'FT'}
+          <span className="text-right text-[11px] font-semibold text-muted">
+            {timeBadge}
           </span>
         )}
 

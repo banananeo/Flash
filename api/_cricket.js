@@ -93,6 +93,49 @@ function parseScoreString(rawScore) {
   return { score: compact || full, overs, fullScore: full };
 }
 
+function formatCricketDateAndTime(isoDate) {
+  if (!isoDate) return { dateISO: '', dateLabel: '', kickoffLabel: '' };
+  try {
+    const d = new Date(isoDate);
+    if (!Number.isFinite(d.getTime())) return { dateISO: '', dateLabel: '', kickoffLabel: '' };
+    const dateISO = d.toISOString().slice(0, 10);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const wk = d.toLocaleDateString('en-GB', { weekday: 'short' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+    const dateLabel = dateISO === todayIso ? 'Today' : `${wk} ${day} ${mon}`;
+    return {
+      dateISO,
+      dateLabel,
+      kickoffLabel: dateISO === todayIso ? timeStr : `${dateLabel} · ${timeStr}`,
+    };
+  } catch {
+    return { dateISO: '', dateLabel: '', kickoffLabel: '' };
+  }
+}
+
+function getNextCricketDates(baseDateStr = '', daysAhead = 3) {
+  let start = new Date();
+  if (/^\d{8}$/.test(baseDateStr)) {
+    const y = Number(baseDateStr.slice(0, 4));
+    const m = Number(baseDateStr.slice(4, 6)) - 1;
+    const d = Number(baseDateStr.slice(6, 8));
+    start = new Date(Date.UTC(y, m, d));
+  }
+  const fmt = (dt) => {
+    const yyyy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+  };
+  const out = [];
+  for (let i = 1; i <= daysAhead; i++) {
+    out.push(fmt(new Date(start.getTime() + i * 86400000)));
+  }
+  return out;
+}
+
 function normalizeHeaderEvent(ev, league) {
   const seriesId = String(league?.id || '');
   const rawId = String(ev?.id || '');
@@ -135,6 +178,8 @@ function normalizeHeaderEvent(ev, league) {
     };
   };
 
+  const { dateISO, dateLabel, kickoffLabel } = formatCricketDateAndTime(ev.date);
+
   return {
     id: seriesId ? `cr-${seriesId}-${rawId}` : `cr-${rawId}`,
     rawId,
@@ -145,6 +190,9 @@ function normalizeHeaderEvent(ev, league) {
     format,
     country: '',
     status,
+    dateISO,
+    dateLabel,
+    kickoffLabel,
     hasScores: hasAnyScore,
     teamA: mapTeam(c1, 'Team A'),
     teamB: mapTeam(c2, 'Team B'),
@@ -157,9 +205,24 @@ function normalizeHeaderEvent(ev, league) {
   };
 }
 
-export async function fetchEspnLiveMatches(date = '') {
-  const data = await fetchJson(espnHeaderUrl(date), { timeoutMs: 10000, retries: 1 });
-  const leagues = data?.sports?.[0]?.leagues || [];
+export async function fetchEspnLiveMatches(date = '', options = {}) {
+  const cleanDate = String(date || '').trim().replace(/-/g, '');
+  const safeDate = /^\d{8}$/.test(cleanDate) ? cleanDate : '';
+  const includeUpcoming = options.upcoming !== undefined ? Boolean(options.upcoming) : !safeDate;
+
+  const datesToFetch = [safeDate, ...(includeUpcoming ? getNextCricketDates(safeDate, 3) : [])];
+  const settled = await Promise.allSettled(
+    datesToFetch.map((d, idx) =>
+      fetchJson(espnHeaderUrl(d), { timeoutMs: idx === 0 ? 10000 : 8000, retries: idx === 0 ? 1 : 0 }),
+    ),
+  );
+
+  const ok = settled.filter((r) => r.status === 'fulfilled');
+  if (!ok.length) {
+    throw settled[0]?.reason || new Error('ESPN Cricket header unreachable');
+  }
+
+  const leagues = ok.flatMap((r) => r.value?.sports?.[0]?.leagues || []);
   const matches = [];
   const seen = new Set();
 
@@ -175,10 +238,14 @@ export async function fetchEspnLiveMatches(date = '') {
   const rank = (m) => {
     if (m.status === 'live' && m.hasScores) return 0;
     if (m.status === 'live') return 1;
-    if (m.status === 'ft') return 2;
+    if (m.status === 'scheduled') return 2;
     return 3;
   };
-  matches.sort((a, b) => rank(a) - rank(b));
+  matches.sort((a, b) => {
+    const r = rank(a) - rank(b);
+    if (r !== 0) return r;
+    return String(a.time || '').localeCompare(String(b.time || ''));
+  });
 
   return matches.map(({ hasScores: _ignore, ...rest }) => rest);
 }

@@ -81,7 +81,9 @@ function cricketDevMiddleware() {
           if (pathname === '/live' || pathname === '/' || pathname === '/cricScore') {
             const rawDate = String(u.searchParams.get('date') || '').trim().replace(/-/g, '')
             const safeDate = /^\d{8}$/.test(rawDate) ? rawDate : ''
-            const matches = await fetchEspnLiveMatches(safeDate)
+            const up = u.searchParams.get('upcoming')
+            const upcoming = up == null ? !safeDate : up === '1' || up === 'true'
+            const matches = await fetchEspnLiveMatches(safeDate, { upcoming })
             res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
             send(200, { provider: 'espn', date: safeDate || 'today', matches })
             return
@@ -123,7 +125,9 @@ function footballDevMiddleware() {
           const pathname = u.pathname || '/'
           if (pathname === '/live' || pathname === '/' || pathname === '/fixtures') {
             const date = sanitizeDateParam(u.searchParams.get('date'))
-            const matches = await fetchEspnFootballMatches(date)
+            const up = u.searchParams.get('upcoming')
+            const upcoming = up == null ? !date : up === '1' || up === 'true'
+            const matches = await fetchEspnFootballMatches(date, { upcoming })
             res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
             send(200, { provider: 'espn', date: date || 'today', matches })
             return

@@ -2,9 +2,10 @@
 // Leading `_` = not routed by Vercel (same convention as api/_cricket.js).
 // Unauthenticated public JSON feeds — no API key required, no 100 req/day quota.
 
-export const espnSoccerHeaderUrl = (date) => {
+export const espnSoccerHeaderUrl = (date, leagueSlug = '') => {
   const base = 'https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=soccer';
-  return date ? `${base}&dates=${encodeURIComponent(date)}` : base;
+  const lg = leagueSlug ? `&league=${encodeURIComponent(leagueSlug)}` : '';
+  return date ? `${base}${lg}&dates=${encodeURIComponent(date)}` : `${base}${lg}`;
 };
 
 export const espnSoccerAllUrl = (date) => {
@@ -14,6 +15,61 @@ export const espnSoccerAllUrl = (date) => {
 
 export const espnSoccerSummaryUrl = (leagueSlug, eventId) =>
   `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(leagueSlug)}/summary?event=${encodeURIComponent(eventId)}`;
+
+// Top leagues fetched across a 7-day window when upcoming=1 so users can always
+// see the live score OR next upcoming match for any major league or club.
+export const CURATED_FOOTBALL_LEAGUES = [
+  'eng.1',
+  'uefa.champions',
+  'esp.1',
+  'ita.1',
+  'ger.1',
+  'fra.1',
+  'uefa.europa',
+  'ind.1',
+  'usa.1',
+  'bra.1',
+];
+
+function computeDateRangeParam(baseDateStr = '', daysAhead = 7) {
+  let start = new Date();
+  if (/^\d{8}$/.test(baseDateStr)) {
+    const y = Number(baseDateStr.slice(0, 4));
+    const m = Number(baseDateStr.slice(4, 6)) - 1;
+    const d = Number(baseDateStr.slice(6, 8));
+    start = new Date(Date.UTC(y, m, d));
+  }
+  const fmt = (dt) => {
+    const yyyy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+  };
+  const end = new Date(start.getTime() + daysAhead * 86400000);
+  return `${fmt(start)}-${fmt(end)}`;
+}
+
+function formatDateAndKickoff(isoDate) {
+  if (!isoDate) return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
+  try {
+    const d = new Date(isoDate);
+    if (!Number.isFinite(d.getTime())) return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
+    const dateISO = d.toISOString().slice(0, 10);
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const wk = d.toLocaleDateString('en-GB', { weekday: 'short' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+    const dateLabel = dateISO === todayIso ? 'Today' : `${wk} ${day} ${mon}`;
+    return {
+      dateISO,
+      dateLabel,
+      kickoffLabel: dateISO === todayIso ? timeStr : `${dateLabel} · ${timeStr}`,
+    };
+  } catch {
+    return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
+  }
+}
 
 const FETCH_HEADERS = {
   'User-Agent': 'Mozilla/5.0',
@@ -179,6 +235,8 @@ function normalizeHeaderEvent(ev, league, scorersMap) {
     return Number.isFinite(n) ? n : status === 'scheduled' ? null : 0;
   };
 
+  const { dateISO, dateLabel, kickoffLabel } = formatDateAndKickoff(ev.date);
+
   return {
     id: leagueSlug ? `fb-${leagueSlug}-${rawId}` : `fb-${rawId}`,
     rawId,
@@ -189,6 +247,9 @@ function normalizeHeaderEvent(ev, league, scorersMap) {
     country: '',
     status,
     minute,
+    dateISO,
+    dateLabel,
+    kickoffLabel,
     halfLabel,
     statusDetail: detailText || shortDetail,
     progressPct: computeProgressPct(status, minute, period),
@@ -219,23 +280,42 @@ function normalizeHeaderEvent(ev, league, scorersMap) {
   };
 }
 
-export async function fetchEspnFootballMatches(rawDate = '') {
+export async function fetchEspnFootballMatches(rawDate = '', options = {}) {
   const date = sanitizeDateParam(rawDate);
-  const [headerRes, allRes] = await Promise.allSettled([
+  const includeUpcoming = options.upcoming !== undefined ? Boolean(options.upcoming) : !date;
+  const rangeParam = includeUpcoming ? computeDateRangeParam(date, 7) : '';
+
+  // Extra leagues that ESPN's generic 7-day soccer header sometimes omits unless queried with &league=
+  const extraLeagues = includeUpcoming ? ['ita.1', 'ger.1', 'fra.1', 'ind.1', 'bra.1'] : [];
+
+  const tasks = [
     fetchJson(espnSoccerHeaderUrl(date), { timeoutMs: 10000, retries: 1 }),
     fetchJson(espnSoccerAllUrl(date), { timeoutMs: 8000, retries: 0 }),
-  ]);
+  ];
+  if (includeUpcoming) {
+    tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam), { timeoutMs: 9000, retries: 0 }));
+    for (const slug of extraLeagues) {
+      tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam, slug), { timeoutMs: 8000, retries: 0 }));
+    }
+  }
 
-  if (headerRes.status !== 'fulfilled') {
+  const settled = await Promise.allSettled(tasks);
+  const [headerRes, allRes, ...upcomingRes] = settled;
+
+  if (headerRes.status !== 'fulfilled' && !upcomingRes.some((r) => r.status === 'fulfilled')) {
     throw headerRes.reason || new Error('ESPN Soccer header unreachable');
   }
 
   const scorersMap = allRes.status === 'fulfilled' ? buildScorersMap(allRes.value) : new Map();
-  const leagues = headerRes.value?.sports?.[0]?.leagues || [];
+  const leagueGroups = [
+    ...(headerRes.status === 'fulfilled' ? headerRes.value?.sports?.[0]?.leagues || [] : []),
+    ...upcomingRes.flatMap((r) => (r.status === 'fulfilled' ? r.value?.sports?.[0]?.leagues || [] : [])),
+  ];
+
   const matches = [];
   const seen = new Set();
 
-  for (const league of leagues) {
+  for (const league of leagueGroups) {
     for (const ev of league?.events || []) {
       const m = normalizeHeaderEvent(ev, league, scorersMap);
       if (!m || seen.has(m.id)) continue;

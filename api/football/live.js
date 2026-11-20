@@ -8,9 +8,11 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, 'http://localhost');
   const date = sanitizeDateParam(url.searchParams.get('date'));
+  const upcomingParam = url.searchParams.get('upcoming');
+  const upcoming = upcomingParam == null ? !date : upcomingParam === '1' || upcomingParam === 'true';
 
   try {
-    const matches = await fetchEspnFootballMatches(date);
+    const matches = await fetchEspnFootballMatches(date, { upcoming });
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({ provider: 'espn', date: date || 'today', matches });

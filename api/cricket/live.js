@@ -9,9 +9,11 @@ export default async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const date = String(url.searchParams.get('date') || '').trim().replace(/-/g, '');
   const safeDate = /^\d{8}$/.test(date) ? date : '';
+  const upcomingParam = url.searchParams.get('upcoming');
+  const upcoming = upcomingParam == null ? !safeDate : upcomingParam === '1' || upcomingParam === 'true';
 
   try {
-    const matches = await fetchEspnLiveMatches(safeDate);
+    const matches = await fetchEspnLiveMatches(safeDate, { upcoming });
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({ provider: 'espn', date: safeDate || 'today', matches });
