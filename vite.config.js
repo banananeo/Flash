@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
+import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail } from './api/_cricket.js'
 import { fetchEspnFootballMatches, fetchEspnFootballDetail, sanitizeDateParam } from './api/_football.js'
@@ -20,6 +21,11 @@ function articleDevMiddleware() {
         try {
           const u = new URL(req.url, 'http://localhost')
           const target = assertPublicHttpUrl(u.searchParams.get('url') || '')
+          const espn = await fetchEspnStory(target).catch(() => null)
+          if (espn) {
+            send(200, espn)
+            return
+          }
           const ctl = new AbortController()
           const t = setTimeout(() => ctl.abort(), 12000)
           let upstream
@@ -143,6 +149,33 @@ function footballDevMiddleware() {
   }
 }
 
+// Dev-only parity for api/news.js (BBC RSS / ESPN / Google News RSS, no key)
+function newsDevMiddleware() {
+  return {
+    name: 'news-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/news', async (req, res) => {
+        const send = (status, obj) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(obj))
+        }
+        try {
+          const u = new URL(req.url, 'http://localhost')
+          const articles = await getNews({
+            category: u.searchParams.get('category') || 'all',
+            q: u.searchParams.get('q') || '',
+            max: u.searchParams.get('max') || '10',
+          })
+          send(200, { articles })
+        } catch (e) {
+          send(e?.status || 502, { error: `News upstream unreachable: ${e?.message || 'Unknown error'}` })
+        }
+      })
+    },
+  }
+}
+
 // Dev-only parity for api/widget-scores.js
 function widgetScoresDevMiddleware() {
   return {
@@ -187,13 +220,12 @@ function widgetScoresDevMiddleware() {
   }
 }
 
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
-  const gnewsKey = env.VITE_GNEWS || process.env.VITE_GNEWS || ''
+export default defineConfig(() => {
   return {
     plugins: [
       react(),
       articleDevMiddleware(),
+      newsDevMiddleware(),
       cricketDevMiddleware(),
       footballDevMiddleware(),
       widgetScoresDevMiddleware(),
@@ -234,9 +266,9 @@ export default defineConfig(({ mode }) => {
         workbox: {
           runtimeCaching: [
             {
-              urlPattern: /\/api\/gnews.*/i,
+              urlPattern: /\/api\/news.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'gnews', expiration: { maxEntries: 30, maxAgeSeconds: 600 } },
+              options: { cacheName: 'news', expiration: { maxEntries: 30, maxAgeSeconds: 600 } },
             },
             {
               urlPattern: /\/api\/cricket\/.*/i,
@@ -264,21 +296,6 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       proxy: {
-        // GNews: client calls /api/gnews?category=sports&max=10 (or ?q=...) — key injected server-side
-        '/api/gnews': {
-          target: 'https://gnews.io',
-          changeOrigin: true,
-          rewrite: (p) => {
-            const u = new URL(p, 'http://localhost')
-            const params = new URLSearchParams(u.search)
-            params.delete('apikey')
-            if (gnewsKey) params.set('apikey', gnewsKey)
-            if (!params.get('lang')) params.set('lang', 'en')
-            if (!params.get('country')) params.set('country', 'us')
-            if (!params.get('max')) params.set('max', '10')
-            return `/api/v4/top-headlines?${params}`
-          },
-        },
         // F1 (Jolpica, no CORS upstream)
         '/api/f1standings': {
           target: 'https://api.jolpi.ca',

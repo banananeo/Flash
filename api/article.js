@@ -6,6 +6,7 @@
 // Failures (paywall/403/timeout/SSRF-block) return 4xx/502 JSON — the client
 // then falls back to summary + "Open original" link, never a blank modal.
 import { extractArticle, assertPublicHttpUrl as assertPublicUrl } from './_extract.js';
+import { fetchEspnStory } from './_news.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,6 +26,13 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ESPN story pages are JS-rendered → read the body from ESPN's content API
+    const espn = await fetchEspnStory(target).catch(() => null);
+    if (espn) {
+      res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=300');
+      return res.status(200).json(espn);
+    }
+
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 12000);
     let upstream;

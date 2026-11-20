@@ -1,4 +1,4 @@
-// Editorial fallback stories — same shape as live GNews articles.
+// Editorial fallback stories — same shape as live feed articles.
 
 export const CATEGORIES = [
   { id: 'all', label: 'For you' },

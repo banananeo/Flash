@@ -36,8 +36,11 @@ export default function ArticleModal({ article, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [article, onClose])
 
+  // external = redirect links (Google News search) the reader can't extract
+  const canExtract = Boolean(article?.url) && !article?.external
+
   useEffect(() => {
-    const url = article?.url
+    const url = canExtract ? article?.url : null
     if (!url) return undefined
     let cancelled = false
     fetchArticleText(url)
@@ -50,13 +53,12 @@ export default function ArticleModal({ article, onClose }) {
     return () => {
       cancelled = true
     }
-  }, [article?.url])
+  }, [article?.url, canExtract])
 
-  const hasUrl = Boolean(article?.url)
-  const matched = hasUrl && reqState.url === article.url
+  const matched = canExtract && reqState.url === article.url
   const data = matched ? reqState.data : null
   const error = matched ? reqState.error : null
-  const loading = hasUrl && (!matched || !reqState.done)
+  const loading = canExtract && (!matched || !reqState.done)
 
   const handleShare = async () => {
     if (!article) return
@@ -197,6 +199,13 @@ export default function ArticleModal({ article, onClose }) {
               <div className="mt-5 rounded-[16px] bg-sage p-4 text-[13px] leading-relaxed text-muted">
                 <p className="font-semibold text-ink">Publisher preview only</p>
                 <p className="mt-1">{error}</p>
+              </div>
+            )}
+
+            {!loading && article.external && (
+              <div className="mt-5 rounded-[16px] bg-sage p-4 text-[13px] leading-relaxed text-muted">
+                <p className="font-semibold text-ink">Search result preview</p>
+                <p className="mt-1">Read the full story on {article.source || 'the publisher’s site'}.</p>
               </div>
             )}
 

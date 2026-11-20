@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { MOCK_NEWS } from '../data/mockNews'
-import { fetchGNews } from '../lib/gnews'
+import { fetchNews as fetchFeed } from '../lib/news'
 
 function loadSaved() {
   try {
@@ -72,7 +72,7 @@ export const useNewsStore = create((set, get) => ({
     const mySeq = ++newsSeq
     set({ status: 'loading', error: null })
     try {
-      const { articles } = await fetchGNews(cat, 10, q)
+      const { articles } = await fetchFeed(cat, 10, q)
       if (mySeq !== newsSeq) return
       if (!articles.length) throw new Error('No articles found')
       set({ cards: articles, status: 'live', source: 'live', error: null })
