@@ -1,95 +1,46 @@
-// API-Football → normalized Match shape.
-// Docs: GET https://v3.football.api-sports.io/fixtures?live=all
-// Tries Vite proxy first (key server-side), falls back to direct fetch
-// with header (api-sports allows browser CORS).
-
-function mapFixture(f, i = 0) {
-  const short = f.fixture?.status?.short
-  const isLive = ['1H', '2H', 'ET', 'P', 'LIVE', 'HT', 'BT'].includes(short)
-  const isFT = ['FT', 'AET', 'PEN'].includes(short)
-  const elapsed = f.fixture?.status?.elapsed
-  return {
-    // index fallback: bare `fb-undefined` ids would collide + break keys
-    id: `fb-${f.fixture?.id ?? `x${i}`}`,
-    sport: 'football',
-    league: `${f.league?.name || 'Football'} • ${f.league?.round || f.fixture?.status?.long || ''}`.trim(),
-    leagueName: f.league?.name || 'Football',
-    country: f.league?.country || '',
-    season: f.league?.season ?? '',
-    status: isLive ? 'live' : isFT ? 'ft' : 'scheduled',
-    minute: isLive ? (elapsed ? `${elapsed}'` : 'LIVE') : short || 'NS',
-    teamA: { name: f.teams?.home?.name || 'Home', short: (f.teams?.home?.name || 'HOM').slice(0, 3).toUpperCase(), score: f.goals?.home ?? 0, logo: f.teams?.home?.logo },
-    teamB: { name: f.teams?.away?.name || 'Away', short: (f.teams?.away?.name || 'AWY').slice(0, 3).toUpperCase(), score: f.goals?.away ?? 0, logo: f.teams?.away?.logo },
-    events: (f.events || []).slice(0, 8).map((e) => ({
-      min: `${e.time?.elapsed ?? ''}'`,
-      text: `${e.type === 'Goal' ? '⚽' : e.type === 'Card' ? (/red/i.test(e.detail || '') ? '🟥' : '🟨') : e.type === 'subst' ? '🔄' : '•'} ${e.player?.name || ''} (${e.team?.name || ''})${e.detail ? ` — ${e.detail}` : ''}`,
-    })),
-    stats: (f.statistics || []).slice(0, 3).map((s) => ({ label: s.type, display: `${s.value ?? '–'}` })),
-    rawId: f.fixture?.id,
-    time: f.fixture?.date,
-  }
-}
+// ESPN Soccer (Football) public JSON → normalized Match & Match Centre shapes.
+// Same-origin proxy: /api/football/live[?date=YYYYMMDD] + /api/football/detail?id=...&league=...
+// Zero API key, zero 100 req/day quota.
 
 async function readJSON(res, what = 'Football') {
   try {
     return await res.json()
   } catch {
-    throw new Error(`${what} sent a bad response — showing mock`)
+    throw new Error(`${what} sent a bad response — showing preview`)
   }
 }
 
 function friendlyFootballError(e) {
   if (e instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(e?.message || '')) {
-    return new Error('Network blocked — check connection / ad-blocker / VPN — showing mock')
+    return new Error('Network blocked — check connection / ad-blocker / VPN')
   }
   return e
 }
 
-async function fetchViaProxy(path) {
-  const res = await fetch(`/api/football${path}`)
-  if (res.status === 404) throw new Error('proxy-miss')
-  return res
-}
-
-async function fetchDirect(path, key) {
-  return fetch(`https://v3.football.api-sports.io${path}`, {
-    headers: { 'x-apisports-key': key },
-  })
-}
-
-export async function fetchFootballLive() {
-  const cacheKey = 'live-cache-football'
+export async function fetchFootballLive(dateStr = '') {
+  const cleanDate = String(dateStr || '').replace(/-/g, '')
+  const cacheKey = `live-cache-football-${cleanDate || 'today'}`
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-    if (cached && Date.now() - cached.ts < 90 * 1000 && cached.matches?.length) {
+    if (
+      cached &&
+      cached.provider === 'espn' &&
+      Date.now() - cached.ts < 60 * 1000 &&
+      cached.matches?.length
+    ) {
       return { matches: cached.matches, cached: true }
     }
   } catch { /* ignore */ }
 
-  const key = import.meta.env.VITE_FOOTBALL
-  const path = '/fixtures?live=all'
-
-  // 1) Same-origin proxy first — works in dev (Vite) AND prod (Vercel
-  // serverless api/football.js). No client key required.
+  const qs = cleanDate ? `?date=${encodeURIComponent(cleanDate)}` : ''
   let res
   try {
-    res = await fetchViaProxy(path)
-    // proxy without key → 401/403/500: retry direct with bundled key
-    if ((res.status === 401 || res.status === 403 || res.status === 500) && key) {
-      res = await fetchDirect(path, key)
-    }
+    res = await fetch(`/api/football/live${qs}`)
+    if (res.status === 404) throw new Error('Football API route not found')
   } catch (e) {
-    // proxy-miss / network → direct fallback needs the client key
-    if (!key) throw friendlyFootballError(e)
-    try {
-      res = await fetchDirect(path, key)
-    } catch (e2) {
-      throw friendlyFootballError(e2)
-    }
+    throw friendlyFootballError(e)
   }
-  if (!res) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
-  if (res.status === 429) throw new Error('Football quota hit — showing mock')
-  if (res.status === 500) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
+  if (res.status === 429) throw new Error('Football rate limit hit')
   if (!res.ok) {
     let msg = `Football error ${res.status}`
     try {
@@ -98,37 +49,39 @@ export async function fetchFootballLive() {
     } catch { /* keep default */ }
     throw new Error(msg)
   }
-  const data = await readJSON(res)
-  if (data.errors && Object.keys(data.errors).length) {
-    throw new Error(`Football key error: ${Object.values(data.errors).flat().join(' ')}`)
-  }
-  const matches = (data.response || []).slice(0, 15).map((f, i) => mapFixture(f, i))
 
-  try {
-    localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), matches }))
-  } catch { /* ignore */ }
+  const data = await readJSON(res)
+  const rawList = Array.isArray(data) ? data : Array.isArray(data?.matches) ? data.matches : []
+  const matches = rawList.filter((m) => m && m.id && m.teamA && m.teamB)
+
+  if (matches.length) {
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ provider: 'espn', ts: Date.now(), matches }))
+    } catch { /* ignore */ }
+  }
   return { matches, cached: false }
 }
 
-// Full scoreboard: events for one fixture (proxy first, direct fallback)
-export async function fetchFixtureDetail(fixtureId) {
-  const key = import.meta.env.VITE_FOOTBALL
-  const path = `/fixtures/events?fixture=${fixtureId}`
+// Match Centre detail: { header, stats[], latestMoment, lineups: { home, away }, events[] }
+export async function fetchFootballDetail(eventId, leagueSlug = '') {
+  const rawId = String(eventId || '').replace(/^fb-/, '')
+  const params = new URLSearchParams({ id: rawId })
+  if (leagueSlug) params.set('league', String(leagueSlug))
+
   let res
   try {
-    res = await fetchViaProxy(path)
-    if ((res.status === 404 || res.status === 401 || res.status === 500) && key) {
-      throw new Error('proxy-miss')
-    }
-  } catch {
-    if (!key) throw new Error('Add VITE_FOOTBALL in Vercel env vars for live — showing mock')
-    try {
-      res = await fetchDirect(path, key)
-    } catch (e) {
-      throw friendlyFootballError(e)
-    }
+    res = await fetch(`/api/football/detail?${params}`)
+    if (res.status === 404) throw new Error('Match centre not found')
+  } catch (e) {
+    throw friendlyFootballError(e)
   }
-  if (!res.ok) throw new Error(`Fixture error ${res.status}`)
-  const data = await readJSON(res, 'Fixture')
-  return data.response || []
+  if (!res.ok) throw new Error(`Match centre error ${res.status}`)
+  const data = await readJSON(res, 'Match centre')
+  return {
+    header: data?.header || null,
+    stats: Array.isArray(data?.stats) ? data.stats : [],
+    latestMoment: data?.latestMoment || null,
+    lineups: data?.lineups || { home: null, away: null },
+    events: Array.isArray(data?.events) ? data.events : [],
+  }
 }

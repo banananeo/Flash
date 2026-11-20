@@ -1,44 +1,28 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import { useF1Store } from '../../store/useF1Store'
 
-function ResultRow({ r, i }) {
-  const classified = r.pos != null
-  return (
-    <motion.div
-      initial={{ y: 12, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ delay: Math.min(i * 0.02, 0.3) }}
-      className={`flex items-center gap-2 border-[3px] px-2 py-1.5 shadow-brutal-xs ${r.pos === 1 ? 'border-black bg-brutal-yellow text-black' : 'border-black bg-white text-black dark:border-bone dark:bg-surface dark:text-bone'}`}
-    >
-      <span className="w-7 shrink-0 font-black text-lg">{classified ? r.pos : r.posText || '–'}</span>
-      <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-black text-sm leading-tight">
-          {r.acro} <span className="font-mono text-[10px] font-bold uppercase opacity-60">{r.team}</span>
-        </p>
-        <p className="truncate font-mono text-[10px] font-bold uppercase opacity-60">
-          {r.grid != null ? `P${r.grid} → ` : ''}{r.status || ''}
-          {r.fastest ? ` • FL ${r.fastest}` : ''}
-        </p>
-      </div>
-      {r.points > 0 && (
-        <span className="shrink-0 font-mono text-[10px] font-bold opacity-60">+{r.points}</span>
-      )}
-      <span className="shrink-0 font-mono text-xs font-black">{r.time || (classified ? '' : r.status)}</span>
-    </motion.div>
-  )
+const pad2 = (n) => String(n).padStart(2, '0')
+
+function fmtRaceMeta(schedule, round, circuit) {
+  const hit = (schedule || []).find((r) => String(r.round) === String(round))
+  let dateStr = ''
+  if (hit?.dateUTC) {
+    try {
+      const d = new Date(hit.dateUTC)
+      const dd = String(d.getUTCDate()).padStart(2, '0')
+      const mon = d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }).toUpperCase()
+      dateStr = `${dd} ${mon} ${d.getUTCFullYear()}`
+    } catch { /* ignore */ }
+  }
+  return [circuit || hit?.circuit, dateStr, round ? `ROUND ${round}` : '']
+    .filter(Boolean)
+    .join(' · ')
+    .toUpperCase()
 }
 
-// Per-round session results: Race | Qualifying toggle + round selector.
-// strip a stray leading '#' — upstream sometimes includes it, and '##..'
-// is an invalid colour (renders an invisible bar)
-const teamColour = (c) => `#${String(c || '666666').replace(/^#/, '')}`
-
-// lib uses pos 99 as "unknown" — never show a literal P99
-const qualiPos = (p) => (p == null || p >= 99 ? 'P–' : `P${p}`)
+// 09 · Race results — teal winner hero card + classification table
 export default function F1Results({ nextRound }) {
-  const [mode, setMode] = useState('race') // race | qualifying
+  const [mode, setMode] = useState('race') // race | qualifying | practice
   const schedule = useF1Store((s) => s.schedule)
   const resultsRound = useF1Store((s) => s.resultsRound)
   const raceResults = useF1Store((s) => s.raceResults)
@@ -46,101 +30,156 @@ export default function F1Results({ nextRound }) {
   const resultsLoading = useF1Store((s) => s.resultsLoading)
   const fetchRound = useF1Store((s) => s.fetchRound)
 
-  // Completed = rounds before the next one (pure render, no clock reads).
   const doneRounds = [...(schedule || [])]
     .filter((r) => nextRound == null || r.round < nextRound)
     .sort((a, b) => b.round - a.round)
 
-  const data = mode === 'race' ? raceResults : qualiResults
+  const data = mode === 'qualifying' ? qualiResults : raceResults
   const rows = data?.rows || []
+  const winner = rows[0] || null
+  const rest = rows.slice(1)
+  const activeRound = data?.round || resultsRound
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1 text-xs font-black uppercase">
-          Round
+    <div>
+      {/* Title + Round picker */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[28px] font-medium leading-tight tracking-[-0.02em] text-ink">
+            {data?.raceName || 'Latest Grand Prix'}
+          </h2>
+          <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+            {fmtRaceMeta(schedule, activeRound, data?.circuit)}
+          </p>
+        </div>
+
+        {doneRounds.length > 0 && (
           <select
+            aria-label="Select round"
             value={resultsRound || ''}
             onChange={(e) => fetchRound(e.target.value || 'last')}
-            className="border-2 border-black bg-white px-2 py-1.5 text-sm font-bold text-black"
+            className="shrink-0 rounded-full bg-sage px-3 py-1.5 text-[12px] font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-pulse"
           >
             {!resultsRound && <option value="">Latest</option>}
-            {/* current round may not be in the completed list (schedule lag)
-                — always render it so the select never goes blank */}
             {!!resultsRound && !doneRounds.some((r) => String(r.round) === String(resultsRound)) && (
               <option value={resultsRound}>R{resultsRound}</option>
             )}
             {doneRounds.map((r) => (
-              <option key={r.round} value={r.round}>R{r.round} • {r.name}</option>
+              <option key={r.round} value={r.round}>
+                R{r.round}
+              </option>
             ))}
           </select>
-        </label>
-        <div className="grid grid-cols-2 gap-2 self-end">
-          {[
-            { id: 'race', label: 'Race' },
-            { id: 'qualifying', label: 'Quali' },
-          ].map((t) => (
-            <motion.button
-              key={t.id}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => setMode(t.id)}
-              className={`border-[3px] border-black px-2 py-1.5 text-xs font-black uppercase dark:border-bone ${mode === t.id ? 'bg-black text-white' : 'bg-white text-black dark:bg-surface dark:text-bone'}`}
-            >
-              {t.label}
-            </motion.button>
-          ))}
-        </div>
+        )}
       </div>
 
-      {!!data?.raceName && (
-        <p className="font-mono text-[11px] font-bold uppercase opacity-60">
-          {data.raceName}{data.circuit ? ` • ${data.circuit}` : ''}
-        </p>
-      )}
+      {/* Session Pills: Race | Qualifying | Practice */}
+      <div className="mt-5 flex items-center gap-2">
+        {[
+          { id: 'race', label: 'Race' },
+          { id: 'qualifying', label: 'Qualifying' },
+          { id: 'practice', label: 'Practice' },
+        ].map((t) => {
+          const active = mode === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setMode(t.id)}
+              className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
+                active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
 
       {resultsLoading ? (
-        <div className="animate-pulse border-[3px] border-black bg-white p-4 shadow-brutal-sm dark:border-bone dark:bg-surface">
-          <div className="h-4 bg-black/20" />
-          <div className="mt-2 h-6 bg-black/40" />
+        <div className="mt-6 space-y-4">
+          <div className="h-[160px] animate-pulse rounded-[20px] bg-sage" />
+          <div className="h-12 animate-pulse rounded-[12px] bg-white" />
+          <div className="h-12 animate-pulse rounded-[12px] bg-white" />
         </div>
-      ) : mode === 'race' ? (
-        <div className="flex flex-col gap-1.5">
-          {rows.map((r, i) => <ResultRow key={r.num || r.acro || i} r={r} i={i} />)}
-          {!rows.length && (
-            <p className="border-[3px] border-dashed border-black bg-white p-4 text-center font-mono text-xs font-bold uppercase dark:border-bone dark:bg-surface dark:text-bone">
-              Results pending — lands after the flag
-            </p>
-          )}
+      ) : mode === 'practice' ? (
+        <div className="mt-6 rounded-[20px] bg-white p-6 text-center">
+          <p className="text-[16px] font-semibold text-ink">Practice timing unavailable</p>
+          <p className="mt-1.5 text-[13px] text-muted">
+            Jolpica provides official Qualifying and Race classifications. Switch tabs above to inspect session results.
+          </p>
+        </div>
+      ) : !rows.length ? (
+        <div className="mt-6 rounded-[20px] bg-white p-6 text-center text-[13px] text-muted">
+          Classification pending — results land after the chequered flag.
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {rows.map((r, i) => (
-            <div
-              key={r.num || r.acro || i}
-              className={`flex items-center gap-2 border-[3px] px-2 py-1.5 shadow-brutal-xs ${r.pos === 1 ? 'border-black bg-brutal-mint text-black' : 'border-black bg-white text-black dark:border-bone dark:bg-surface dark:text-bone'}`}
-            >
-              <span className="w-7 shrink-0 font-black text-lg">{qualiPos(r.pos)}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
+        <div className="mt-6">
+          {/* Winner / Pole Hero Card */}
+          {winner && (
+            <div className="flex items-center justify-between gap-4 rounded-[20px] bg-pulse p-6 text-ink">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-black text-sm leading-tight">
-                  {r.acro} <span className="font-mono text-[10px] font-bold uppercase opacity-60">{r.team}</span>
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink/75">
+                  {mode === 'qualifying' ? 'POLE POSITION' : 'RACE WINNER'}
                 </p>
-                <p className="truncate font-mono text-[10px] font-bold uppercase opacity-60">
-                  {[r.q1 && `Q1 ${r.q1}`, r.q2 && `Q2 ${r.q2}`, r.q3 && `Q3 ${r.q3}`].filter(Boolean).join(' • ') || 'No time'}
+                <p className="mt-2.5 text-[28px] font-semibold leading-[1.12] tracking-[-0.02em] text-ink">
+                  {winner.name}
+                </p>
+                <p className="mt-3 text-[12px] font-bold text-ink/85">
+                  {winner.team}
+                  {mode === 'qualifying'
+                    ? winner.best
+                      ? ` · ${winner.best}`
+                      : ''
+                    : winner.time
+                      ? ` · ${winner.time}`
+                      : ''}
                 </p>
               </div>
-              {!!r.best && (
-                <span className="shrink-0 border-2 border-brutal-red bg-brutal-red px-1.5 py-0.5 font-mono text-[11px] font-black text-white">
-                  {r.best}
-                </span>
-              )}
+              <span className="shrink-0 font-display text-[56px] font-bold leading-none tracking-tight text-ink">
+                01
+              </span>
             </div>
-          ))}
-          {!rows.length && (
-            <p className="border-[3px] border-dashed border-black bg-white p-4 text-center font-mono text-xs font-bold uppercase dark:border-bone dark:bg-surface dark:text-bone">
-              Qualifying pending — lands after Saturday quali
-            </p>
           )}
+
+          {/* Classification Table */}
+          <div className="mt-6 flex items-center justify-between border-b border-hairline pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+            <span>CLASSIFICATION</span>
+            <span>{mode === 'qualifying' ? 'BEST LAP' : 'TIME / GAP'}</span>
+          </div>
+
+          <div className="divide-y divide-hairline/80">
+            {rest.map((r, i) => {
+              const posLabel =
+                mode === 'qualifying'
+                  ? r.pos < 99
+                    ? pad2(r.pos)
+                    : '–'
+                  : r.pos != null
+                    ? pad2(r.pos)
+                    : r.posText || '–'
+              const rightVal =
+                mode === 'qualifying'
+                  ? r.best || 'No time'
+                  : r.time || r.status || '—'
+              return (
+                <div key={r.num || r.acro || i} className="flex items-center gap-4 py-3.5">
+                  <span className="w-7 shrink-0 font-display text-[13px] font-medium text-muted">
+                    {posLabel}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-ink">{r.name}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
+                      {r.team}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-display text-[13px] font-semibold text-ink">
+                    {rightVal}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>

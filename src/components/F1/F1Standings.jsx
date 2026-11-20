@@ -1,106 +1,127 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { useScoreStore } from '../../store/useScoreStore'
 
-const teamColour = (c) => `#${String(c || '666666').replace(/^#/, '')}`
+const teamColour = (c) => `#${String(c || '64748B').replace(/^#/, '')}`
+const pad2 = (n) => String(n).padStart(2, '0')
 
-function StarButton({ label, active, onToggle }) {
-  return (
-    <button
-      onClick={onToggle}
-      title={active ? `Unpin ${label}` : `Pin ${label}`}
-      aria-label={active ? `Unpin ${label}` : `Pin ${label}`}
-      aria-pressed={!!active}
-      className={`grid h-7 w-7 shrink-0 place-items-center border-2 border-black text-sm leading-none ${active ? 'bg-black text-brutal-yellow' : 'bg-brutal-cream text-black/50'}`}
-    >
-      ★
-    </button>
-  )
-}
-
-// Championship tables: Drivers | Constructors toggle.
+// 07 · Formula 1 — "The championship" Drivers | Constructors table
 export default function F1Standings({ drivers, teams }) {
-  const [tab, setTab] = useState('drivers') // drivers | teams
-  // driver pins live in their own slice — sharing team favs made the scores
-  // section show "no favourite-team matches" after pinning VER
-  const f1Favs = useScoreStore((s) => s.f1Favs)
-  const toggleF1Fav = useScoreStore((s) => s.toggleF1Fav)
-  const favSet = new Set(f1Favs || [])
+  const [tab, setTab] = useState('drivers') // drivers | constructors
 
-  const dRows = [...(drivers || [])].sort((a, b) => {
-    const af = favSet.has(a.acro) ? 0 : 1
-    const bf = favSet.has(b.acro) ? 0 : 1
-    return af - bf || a.pos - b.pos
-  })
+  const dRows = [...(drivers || [])].sort((a, b) => a.pos - b.pos)
   const tRows = [...(teams || [])].sort((a, b) => a.pos - b.pos)
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { id: 'drivers', label: 'Drivers' },
-          { id: 'teams', label: 'Teams' },
-        ].map((t) => (
-          <motion.button
-            key={t.id}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => setTab(t.id)}
-            className={`border-[3px] border-black px-4 py-2 text-sm font-black uppercase dark:border-bone ${tab === t.id ? 'bg-black text-white shadow-brutal-sm' : 'bg-white text-black shadow-brutal-xs dark:bg-surface dark:text-bone'}`}
-          >
-            {t.label}
-          </motion.button>
-        ))}
+    <div>
+      <h2 className="text-[20px] font-semibold text-ink">The championship</h2>
+
+      <div className="mt-3 flex items-center justify-between border-b border-hairline">
+        <div className="flex items-center gap-6">
+          {[
+            { id: 'drivers', label: 'Drivers' },
+            { id: 'constructors', label: 'Constructors' },
+          ].map((t) => {
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`relative pb-2.5 text-[14px] transition-colors ${
+                  active ? 'font-bold text-ink' : 'font-medium text-muted hover:text-ink'
+                }`}
+              >
+                {t.label}
+                {active && (
+                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-pulse" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <span className="pb-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+          PTS
+        </span>
       </div>
 
       {tab === 'drivers' ? (
-        <div className="flex flex-col gap-1.5">
-          {(dRows.length ? dRows : []).map((r, i) => (
-            <div
-              key={r.num || r.acro || i}
-              className="flex items-center gap-2 border-[3px] border-black bg-white px-2 py-1.5 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone"
-            >
-              <StarButton label={r.acro} active={favSet.has(r.acro)} onToggle={() => r.acro && toggleF1Fav(r.acro)} />
-              <span className="w-7 shrink-0 font-black text-lg">{r.pos}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-black text-sm leading-tight">{r.acro}</p>
-                <p className="truncate font-mono text-[10px] font-bold uppercase opacity-60">{r.name} • {r.team}</p>
+        <div className="mt-3">
+          {dRows.map((r, i) => {
+            const isLeader = i === 0
+            return (
+              <div
+                key={r.num || r.acro || i}
+                className={`flex items-center gap-4 px-3 py-3.5 ${
+                  isLeader
+                    ? 'rounded-[14px] bg-sage-leader'
+                    : 'border-b border-hairline/80 last:border-b-0'
+                }`}
+              >
+                <span className="w-6 shrink-0 font-display text-[13px] font-medium text-muted">
+                  {pad2(r.pos)}
+                </span>
+                <span
+                  className="h-7 w-[3px] shrink-0 rounded-full"
+                  style={{ backgroundColor: teamColour(r.colour) }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold leading-tight text-ink">
+                    {r.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
+                    {r.team}
+                  </p>
+                </div>
+                <span className="shrink-0 font-display text-[16px] font-bold text-ink">
+                  {r.points}
+                </span>
               </div>
-              {!!r.wins && (
-                <span className="shrink-0 font-mono text-[10px] font-bold opacity-60">{r.wins}W</span>
-              )}
-              <span className="shrink-0 border-2 border-black bg-brutal-yellow px-1.5 py-0.5 font-mono text-xs font-black text-black">
-                {r.points} PTS
-              </span>
-            </div>
-          ))}
+            )
+          })}
           {!dRows.length && (
-            <p className="border-[3px] border-dashed border-black bg-white p-4 text-center font-mono text-xs font-bold uppercase dark:border-bone dark:bg-surface dark:text-bone">
-              No driver standings right now
+            <p className="mt-4 rounded-[16px] bg-white p-5 text-center text-[13px] text-muted">
+              No driver standings available right now.
             </p>
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {(tRows.length ? tRows : []).map((r, i) => (
-            <div
-              key={r.team || i}
-              className="flex items-center gap-2 border-[3px] border-black bg-white px-2 py-1.5 text-black shadow-brutal-xs dark:border-bone dark:bg-surface dark:text-bone"
-            >
-              <span className="w-7 shrink-0 font-black text-lg">{r.pos}</span>
-              <span className="h-7 w-1.5 shrink-0 border border-black" style={{ backgroundColor: teamColour(r.colour) }} />
-              <p className="min-w-0 flex-1 truncate font-black text-sm">{r.team}</p>
-              {!!r.wins && (
-                <span className="shrink-0 font-mono text-[10px] font-bold opacity-60">{r.wins}W</span>
-              )}
-              <span className="shrink-0 border-2 border-black bg-brutal-mint px-1.5 py-0.5 font-mono text-xs font-black text-black">
-                {r.points} PTS
-              </span>
-            </div>
-          ))}
+        <div className="mt-3">
+          {tRows.map((r, i) => {
+            const isLeader = i === 0
+            return (
+              <div
+                key={r.team || i}
+                className={`flex items-center gap-4 px-3 py-3.5 ${
+                  isLeader
+                    ? 'rounded-[14px] bg-sage-leader'
+                    : 'border-b border-hairline/80 last:border-b-0'
+                }`}
+              >
+                <span className="w-6 shrink-0 font-display text-[13px] font-medium text-muted">
+                  {pad2(r.pos)}
+                </span>
+                <span
+                  className="h-7 w-[3px] shrink-0 rounded-full"
+                  style={{ backgroundColor: teamColour(r.colour) }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold leading-tight text-ink">
+                    {r.team}
+                  </p>
+                  {!!r.wins && (
+                    <p className="mt-0.5 text-[11px] font-medium text-muted">
+                      {r.wins} {r.wins === 1 ? 'win' : 'wins'}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 font-display text-[16px] font-bold text-ink">
+                  {r.points}
+                </span>
+              </div>
+            )
+          })}
           {!tRows.length && (
-            <p className="border-[3px] border-dashed border-black bg-white p-4 text-center font-mono text-xs font-bold uppercase dark:border-bone dark:bg-surface dark:text-bone">
-              No team standings right now
+            <p className="mt-4 rounded-[16px] bg-white p-5 text-center text-[13px] text-muted">
+              No constructor standings available right now.
             </p>
           )}
         </div>

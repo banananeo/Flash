@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Download } from 'lucide-react'
+import { X } from 'lucide-react'
 
-// Captures beforeinstallprompt → brutal install bar. Required for home-screen install.
+// Captures beforeinstallprompt → quiet editorial install banner.
 export default function InstallPrompt() {
   const [deferred, setDeferred] = useState(null)
   const [dismissed, setDismissed] = useState(() => {
@@ -19,8 +19,6 @@ export default function InstallPrompt() {
       e.preventDefault()
       setDeferred(e)
     }
-    // browser-menu installs never fire beforeinstallprompt consumption —
-    // hide the bar so it doesn't stick around post-install
     const onInstalled = () => setDeferred(null)
     window.addEventListener('beforeinstallprompt', onPrompt)
     window.addEventListener('appinstalled', onInstalled)
@@ -33,13 +31,12 @@ export default function InstallPrompt() {
   if (!deferred || dismissed) return null
 
   const install = async () => {
-    if (prompting) return // prompt() consumes the event — never fire twice
+    if (prompting) return
     setPrompting(true)
     try {
       deferred.prompt()
       await deferred.userChoice.catch(() => null)
-    } catch { /* ignore */ }
-    finally {
+    } catch { /* ignore */ } finally {
       setDeferred(null)
       setPrompting(false)
     }
@@ -54,17 +51,28 @@ export default function InstallPrompt() {
 
   return (
     <motion.div
-      initial={{ y: 60, opacity: 0 }}
+      initial={{ y: 40, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed bottom-16 left-3 right-3 z-40 flex items-center gap-2 border-[3px] border-black bg-brutal-yellow p-2.5 shadow-brutal-sm lg:left-auto lg:right-6 lg:w-80"
+      className="fixed bottom-24 left-6 right-6 z-40 flex items-center gap-3 rounded-[16px] border border-hairline bg-white px-4 py-3 text-ink shadow-lg lg:bottom-6 lg:left-auto lg:right-8 lg:w-80"
     >
-      <Download size={18} strokeWidth={3} className="shrink-0" />
-      <p className="text-xs font-black uppercase leading-tight">Install FLASH! on your home screen</p>
-      <button onClick={install} disabled={prompting} className="ml-auto shrink-0 border-2 border-black bg-black px-2 py-1 text-[11px] font-black text-white disabled:opacity-60">
-        {prompting ? '…' : 'INSTALL'}
+      <p className="flex-1 text-[12px] font-medium leading-snug">
+        Install <span className="font-display font-bold">flash</span> for instant briefings
+      </p>
+      <button
+        type="button"
+        onClick={install}
+        disabled={prompting}
+        className="shrink-0 rounded-full bg-pulse px-3.5 py-1.5 text-[11px] font-bold text-ink disabled:opacity-60"
+      >
+        {prompting ? '…' : 'Install'}
       </button>
-      <button onClick={dismiss} className="shrink-0 border-2 border-black bg-white px-1.5 py-0.5 text-[11px] font-black" aria-label="Dismiss install prompt">
-        ✕
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss install prompt"
+        className="shrink-0 text-muted hover:text-ink"
+      >
+        <X size={16} />
       </button>
     </motion.div>
   )

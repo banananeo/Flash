@@ -5,6 +5,7 @@ const API_KEY = import.meta.env.VITE_GNEWS
 // our pill id → GNews category (omit param for 'all' = mixed top headlines)
 const GNEWS_CATEGORY = {
   all: null,
+  world: 'general',
   business: 'business',
   technology: 'technology',
   science: 'science',
@@ -20,26 +21,32 @@ async function readJSON(res) {
   try {
     return await res.json()
   } catch {
-    throw new Error('Bad response from news server — showing mock')
+    throw new Error('Bad response from news server — showing preview')
   }
+}
+
+function estimateReadTime(text) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length
+  const mins = Math.max(2, Math.min(6, Math.round(words / 45) + 2))
+  return `${mins} min read`
 }
 
 function mapArticle(a, pillId, i) {
   // narrow match: GNews appends "[NNN chars]" — a greedy pattern would eat
   // legit brackets earlier in the text
   const raw = (a.description || a.content || '').replace(/\[\d+\s*chars\]$/, '').trim()
-  const summary = raw ? raw.slice(0, 240) : a.title
+  const summary = raw ? raw.slice(0, 260) : a.title
   return {
     // stable id (no Date.now): unstable keys remount cards + bust the cache
     id: a.id || a.url || `${pillId}-${i}`,
     category: pillId,
-    title: (a.title || 'Untitled').toUpperCase().slice(0, 140),
+    title: (a.title || 'Untitled').trim().slice(0, 140),
     summary,
-    source: a.source?.name || a.source?.url || 'GNews',
+    source: a.source?.name || a.source?.url || 'Flash Edit',
     sourceUrl: a.source?.url || null,
     url: a.url || null,
     publishedAt: a.publishedAt || new Date().toISOString(),
-    readTime: '1 min',
+    readTime: estimateReadTime(a.content || a.description),
     image: a.image || fallbackImg(a.id || a.title || `gnews-${i}`),
   }
 }
@@ -51,13 +58,14 @@ function friendlyNetworkError(e) {
   return e
 }
 
-export async function fetchGNews(pillId = 'all', max = 10) {
+export async function fetchGNews(pillId = 'all', max = 10, query = '') {
   const gcat = GNEWS_CATEGORY[pillId] ?? null
+  const q = String(query || '').trim()
   // clamp: protects the 100 req/day quota from oversized page requests
   const count = Math.min(10, Math.max(1, parseInt(max, 10) || 10))
 
   // 10-min cache to protect the 100 req/day free quota
-  const cacheKey = `gnews-cache-${pillId}`
+  const cacheKey = q ? `gnews-q-${q.toLowerCase()}` : `gnews-cache-v2-${pillId}`
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
     if (cached && Date.now() - cached.ts < 10 * 60 * 1000 && cached.articles?.length) {
@@ -75,7 +83,8 @@ export async function fetchGNews(pillId = 'all', max = 10) {
   // serverless api/gnews.js). Key stays server-side, no CORS issues.
   try {
     const proxyParams = new URLSearchParams({ max: String(count) })
-    if (gcat) proxyParams.set('category', gcat)
+    if (gcat && !q) proxyParams.set('category', gcat)
+    if (q) proxyParams.set('q', q)
     const res = await fetch(`/api/gnews?${proxyParams}`)
     if (res.ok) {
       const data = await readJSON(res)
@@ -122,7 +131,8 @@ export async function fetchGNews(pillId = 'all', max = 10) {
     max: String(count),
     apikey: API_KEY,
   })
-  if (gcat) params.set('category', gcat)
+  if (gcat && !q) params.set('category', gcat)
+  if (q) params.set('q', q)
 
   let res
   try {

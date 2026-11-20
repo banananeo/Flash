@@ -1,20 +1,34 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BookOpen, ExternalLink, X } from 'lucide-react'
 import { fetchArticleText } from '../lib/article'
-import { timeAgo } from '../hooks/useNews'
+import { categoryLabel } from '../data/mockNews'
+import { useNewsStore } from '../store/useNewsStore'
+import backIcon from '../assets/icons/back.svg'
+import shareIcon from '../assets/icons/share.svg'
+import bookmarkIcon from '../assets/icons/bookmark.svg'
 
-// In-app full-story reader. Opens from the card back's READ FULL STORY button.
-// Always mounted (like ScoreboardModal); pass article={null} to hide so the
-// exit animation can play. Paywalled/blocked pages degrade to summary +
-// "open original" link — never a blank modal.
+function formatShortDate(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    const day = String(d.getDate()).padStart(2, '0')
+    const month = d.toLocaleDateString('en-GB', { month: 'long' })
+    return `${day} ${month}`
+  } catch {
+    return ''
+  }
+}
+
+// 03 · Story reader — editorial full-screen reading view backed by /api/article.
 export default function ArticleModal({ article, onClose }) {
-  const [data, setData] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [reqState, setReqState] = useState({ url: null, data: null, error: null, done: false })
+  const [copied, setCopied] = useState(false)
+
+  const saved = useNewsStore((s) => (article ? s.saved.some((a) => a.id === article.id) : false))
+  const toggleSave = useNewsStore((s) => s.toggleSave)
 
   useEffect(() => {
-    if (!article) return // no listener while closed
+    if (!article) return
     const onKey = (e) => {
       if (e.key === 'Escape') onClose?.()
     }
@@ -22,144 +36,184 @@ export default function ArticleModal({ article, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [article, onClose])
 
-  // lock background scroll while the reader is open
   useEffect(() => {
-    if (!article) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [article])
-
-  useEffect(() => {
-    if (!article?.url) {
-      setData(null)
-      setError(null)
-      setLoading(false)
-      return
-    }
+    const url = article?.url
+    if (!url) return undefined
     let cancelled = false
-    setData(null)
-    setError(null)
-    setLoading(true)
-    fetchArticleText(article.url)
+    fetchArticleText(url)
       .then((d) => {
-        if (!cancelled) setData(d)
+        if (!cancelled) setReqState({ url, data: d, error: null, done: true })
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setReqState({ url, data: null, error: e.message, done: true })
       })
     return () => {
       cancelled = true
     }
-  }, [article?.url]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [article?.url])
+
+  const hasUrl = Boolean(article?.url)
+  const matched = hasUrl && reqState.url === article.url
+  const data = matched ? reqState.data : null
+  const error = matched ? reqState.error : null
+  const loading = hasUrl && (!matched || !reqState.done)
+
+  const handleShare = async () => {
+    if (!article) return
+    const shareUrl = article.url || window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: article.title, url: shareUrl })
+        return
+      }
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* ignore */ }
+  }
+
+  const paragraphs = Array.isArray(data?.paragraphs) ? data.paragraphs : []
+  const lead = paragraphs[0] || article?.summary || ''
+  const restParas = paragraphs.length > 1 ? paragraphs.slice(1) : []
 
   return (
     <AnimatePresence>
       {article && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 z-50 bg-black/60"
-          />
-          <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-3 sm:p-4" onClick={onClose}>
-            <motion.div
-              initial={{ scale: 0.85, rotate: -2, y: 30, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, y: 0, opacity: 1 }}
-              exit={{ scale: 0.9, rotate: 2, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-              onClick={(e) => e.stopPropagation()}
-              className="card-brutal flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden bg-brutal-cream dark:border-bone dark:bg-surface dark:text-bone sm:max-h-[85vh]"
-              role="dialog"
-              aria-modal="true"
-              aria-label={article.title}
-            >
-              {/* header */}
-              <div className="flex items-center gap-2 border-b-[4px] border-black bg-brutal-yellow p-3">
-                <span className="grid h-9 w-9 shrink-0 place-items-center border-[3px] border-black bg-black text-brutal-yellow">
-                  <BookOpen size={18} strokeWidth={3} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="badge-brutal bg-black text-white">FULL STORY</p>
-                  <p className="mt-1 truncate font-mono text-[11px] font-bold uppercase">
-                    {article.source} • {timeAgo(article.publishedAt)}
-                  </p>
-                </div>
-                <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={onClose} className="btn-brutal shrink-0 bg-white p-2" aria-label="Close reader">
-                  <X size={20} strokeWidth={3} />
-                </motion.button>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-paper"
+          role="dialog"
+          aria-modal="true"
+          aria-label={article.title}
+        >
+          {/* Sticky reader header (03 · Story reader) */}
+          <div className="sticky top-0 z-10 border-b border-hairline/70 bg-paper/95 backdrop-blur-sm">
+            <div className="mx-auto flex h-[60px] max-w-[680px] items-center justify-between px-6">
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Back to briefing"
+                className="grid h-9 w-9 -ml-2 place-items-center rounded-full transition-colors hover:bg-sage"
+              >
+                <img src={backIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
+              </button>
+
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                THE DAILY READ
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => toggleSave(article)}
+                  aria-label={saved ? 'Remove from saved' : 'Save story'}
+                  className={`grid h-9 w-9 place-items-center rounded-full transition-colors ${
+                    saved ? 'bg-pulse' : 'hover:bg-sage'
+                  }`}
+                >
+                  <img src={bookmarkIcon} alt="" width={20} height={20} className="h-[20px] w-[20px] object-contain" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label="Share story"
+                  className="grid h-9 w-9 -mr-2 place-items-center rounded-full transition-colors hover:bg-sage"
+                >
+                  <img src={shareIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
+                </button>
               </div>
-
-              {/* body */}
-              <div className="overflow-y-auto p-4 sm:p-5">
-                {article.image && (
-                  <img src={article.image} alt="" className="mb-3 h-44 w-full border-[3px] border-black object-cover dark:border-bone sm:h-56" draggable={false} />
-                )}
-                <h2 className="font-black text-xl leading-tight tracking-tight">{article.title}</h2>
-                {data?.byline && (
-                  <p className="mt-1 font-mono text-xs font-bold uppercase text-black/60 dark:text-bone/60">By {data.byline}</p>
-                )}
-
-                {loading && (
-                  <div className="mt-4 flex flex-col gap-2" aria-live="polite">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div key={i} className="h-4 animate-pulse border-2 border-black/10 bg-black/10" />
-                    ))}
-                    <p className="text-center font-mono text-[11px] font-bold uppercase">Fetching full story…</p>
-                  </div>
-                )}
-
-                {error && !loading && (
-                  <div className="mt-4 border-[3px] border-black bg-brutal-yellow p-4 text-black shadow-brutal-sm dark:border-bone">
-                    <p className="text-sm font-black uppercase">Couldn't pull the full text in-app</p>
-                    <p className="mt-1 text-sm font-medium">{error}</p>
-                    <p className="mt-2 border-2 border-black bg-white p-2 text-[13px] font-medium leading-snug">{article.summary}</p>
-                  </div>
-                )}
-
-                {!article.url && !loading && (
-                  <div className="mt-4 border-[3px] border-black bg-brutal-yellow p-4 text-black shadow-brutal-sm dark:border-bone">
-                    <p className="text-sm font-black uppercase">Preview card</p>
-                    <p className="mt-1 text-sm font-medium">
-                      This is a built-in preview story, so there is no publisher page to pull.
-                      Live stories load their full text here.
-                    </p>
-                    <p className="mt-2 border-2 border-black bg-white p-2 text-[13px] font-medium leading-snug">{article.summary}</p>
-                  </div>
-                )}
-
-                {Array.isArray(data?.paragraphs) && data.paragraphs.length > 0 && (
-                  <div className="mt-3 flex flex-col gap-3">
-                    {data.paragraphs.map((p, i) => (
-                      <p key={i} className="text-[15px] font-medium leading-relaxed">{p}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* footer — original link always available */}
-              {article.url && (
-                <div className="border-t-[4px] border-black bg-white p-3 dark:border-bone dark:bg-raised">
-                  <a
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-brutal flex items-center justify-center gap-2 bg-black px-4 py-2.5 text-sm text-white dark:border-bone"
-                  >
-                    <ExternalLink size={16} strokeWidth={3} /> OPEN ORIGINAL • {article.source}
-                  </a>
-                </div>
-              )}
-            </motion.div>
+            </div>
           </div>
-        </>
+
+          {/* Editorial article content */}
+          <motion.article
+            initial={{ y: 18, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.25 }}
+            className="mx-auto max-w-[680px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-7"
+          >
+            {copied && (
+              <p className="mb-3 w-fit rounded-full bg-pulse px-3 py-1 text-[11px] font-bold text-ink">
+                Link copied
+              </p>
+            )}
+
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+              THE BIG READ / {categoryLabel(article.category).toUpperCase()}
+            </p>
+
+            <h1 className="mt-3 text-[30px] font-semibold leading-[1.2] tracking-[-0.02em] text-ink sm:text-[36px]">
+              {article.title}
+            </h1>
+
+            <p className="mt-4 text-[12px] font-medium text-muted">
+              {data?.byline || article.source}
+              {article.publishedAt ? `  ·  ${formatShortDate(article.publishedAt)}` : ''}
+              {article.readTime ? `  ·  ${article.readTime}` : ''}
+            </p>
+
+            {(data?.image || article.image) && (
+              <figure className="mt-6">
+                <img
+                  src={data?.image || article.image}
+                  alt={article.title}
+                  className="h-[210px] w-full rounded-[16px] bg-sage object-cover sm:h-[320px]"
+                />
+                <figcaption className="mt-2 text-[10px] font-medium text-muted">
+                  {article.source}
+                </figcaption>
+              </figure>
+            )}
+
+            {loading && (
+              <div className="mt-7 space-y-3" aria-live="polite">
+                <div className="h-5 w-4/5 animate-pulse rounded bg-sage" />
+                <div className="h-4 w-full animate-pulse rounded bg-sage" />
+                <div className="h-4 w-11/12 animate-pulse rounded bg-sage" />
+                <div className="h-4 w-2/3 animate-pulse rounded bg-sage" />
+              </div>
+            )}
+
+            {!loading && lead && (
+              <p className="mt-6 text-[18px] font-semibold leading-[1.45] text-ink">
+                {lead}
+              </p>
+            )}
+
+            {!loading && restParas.length > 0 && (
+              <div className="mt-5 space-y-4">
+                {restParas.map((p, idx) => (
+                  <p key={idx} className="text-[15px] font-normal leading-[1.65] text-muted">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {!loading && error && !paragraphs.length && (
+              <div className="mt-5 rounded-[16px] bg-sage p-4 text-[13px] leading-relaxed text-muted">
+                <p className="font-semibold text-ink">Publisher preview only</p>
+                <p className="mt-1">{error}</p>
+              </div>
+            )}
+
+            {article.url && (
+              <div className="mt-8">
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex h-[44px] w-full items-center justify-center rounded-full bg-pulse text-[13px] font-bold text-ink transition-opacity hover:opacity-90"
+                >
+                  Read full story
+                </a>
+              </div>
+            )}
+          </motion.article>
+        </motion.div>
       )}
     </AnimatePresence>
   )

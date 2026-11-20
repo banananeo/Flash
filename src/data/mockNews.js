@@ -1,130 +1,87 @@
-// Frontend-first mock — covers ALL news types. Summary-only, no full article.
-// Swap with NewsAPI later via useNews hook. Images use picsum for zero-quota dev.
+// Editorial fallback stories — same shape as live GNews articles.
 
 export const CATEGORIES = [
-  { id: 'all', label: 'All', color: '#000000', bg: '#000000' },
-  { id: 'business', label: 'Business', color: '#000', bg: '#B9FF66' },
-  { id: 'technology', label: 'Tech', color: '#000', bg: '#4D7CFE' },
-  { id: 'science', label: 'Science', color: '#000', bg: '#00D9A5' },
-  { id: 'health', label: 'Health', color: '#000', bg: '#FF6B9D' },
-  { id: 'sports', label: 'Sports', color: '#000', bg: '#FF6B35' },
-  { id: 'entertainment', label: 'Fun', color: '#000', bg: '#FFDE59' },
+  { id: 'all', label: 'For you' },
+  { id: 'world', label: 'World' },
+  { id: 'technology', label: 'Tech' },
+  { id: 'business', label: 'Business' },
+  { id: 'science', label: 'Science' },
+  { id: 'entertainment', label: 'Culture' },
+  { id: 'sports', label: 'Sports' },
 ]
 
-export const categoryStyle = (cat) => {
+export const categoryLabel = (cat) => {
   const found = CATEGORIES.find((c) => c.id === cat)
-  return found ?? { id: cat, label: cat, bg: '#fff' }
+  return found ? found.label : cat || 'Briefing'
 }
 
-const img = (seed) => `https://picsum.photos/seed/${seed}/800/500`
+const img = (seed) => `https://picsum.photos/seed/${seed}/900/560`
 
 export const MOCK_NEWS = [
   {
     id: 'm1',
-    category: 'technology',
-    title: 'AI CHIPS JUST GOT 10X FASTER — LAPTOPS WILL FEEL LIKE SUPERCOMPUTERS',
+    category: 'world',
+    title: 'A cleaner future is closer than you think.',
     summary:
-      'New neural accelerators hit 45 TOPS on-device. Translation: live transcription, local LLMs and video upscaling with no cloud lag. Expect the first wave in budget laptops by spring.',
-    source: 'ChipWire',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
-    readTime: '1 min',
-    image: img('aichip'),
+      'The energy transition is picking up speed as offshore wind and grid-scale storage reach cost parity across major markets.',
+    source: 'Flash Edit',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    readTime: '4 min read',
+    image: img('cleanenergy'),
   },
   {
     id: 'm2',
-    category: 'business',
-    title: 'MARKETS BOUNCE: SMALL CAPS LEAD AS RATE-CUT BETS HEAT UP',
+    category: 'technology',
+    title: 'The next era of AI is getting personal.',
     summary:
-      'Investors piled into small-caps after soft inflation data. Analysts say two cuts are now priced in — but warn a hot jobs print could flip the script instantly.',
-    source: 'MoneyBlast',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 52).toISOString(),
-    readTime: '2 min',
-    image: img('market'),
+      'On-device neural accelerators are bringing fast transcription, private reasoning, and instant summaries directly to everyday laptops and phones.',
+    source: 'ChipWire',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
+    readTime: '3 min read',
+    image: img('aichip'),
   },
   {
     id: 'm3',
-    category: 'science',
-    title: 'NASA SPOTS “CITY-KILLER” ASTEROID? NO — IT WILL MISS US BY A MILE (LITERALLY FAR)',
+    category: 'sports',
+    title: 'All eyes on the weekend grid.',
     summary:
-      'Headlines screamed doom. Reality: a 60m rock passing 4x lunar distance. Scientists get great radar data, we get a light show. Win-win, zero apocalypse.',
-    source: 'Orbit Daily',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    readTime: '1 min',
-    image: img('asteroid'),
+      'Fresh aerodynamic upgrades and shifting weather forecasts set up a razor-thin fight for pole position and championship points.',
+    source: 'Formula 1',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 48).toISOString(),
+    readTime: '5 min read',
+    image: img('racing'),
   },
   {
     id: 'm4',
-    category: 'sports',
-    title: 'UNDERDOGS DO IT AGAIN: 94TH-MINUTE SCREAMER STUNS THE LEAGUE',
+    category: 'business',
+    title: 'Small-cap stocks lead the latest rebound as rate expectations shift.',
     summary:
-      'Bottom-of-table FC came back from 2-0 down with 15 minutes left. The winner? A 30-yard volley that broke the xG model and the internet.',
-    source: 'GoalRush',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 130).toISOString(),
-    readTime: '2 min',
-    image: img('football'),
+      'Softer inflation readings pushed investors back into domestic growth equities, while bond desks keep an eye on next week’s payroll print.',
+    source: 'Market Desk',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 75).toISOString(),
+    readTime: '3 min read',
+    image: img('market'),
   },
   {
     id: 'm5',
-    category: 'health',
-    title: 'WALKING 7K STEPS BEATS 10K? NEW STUDY SAYS CONSISTENCY WINS',
+    category: 'science',
+    title: 'Deep-sea submersibles capture rare bioluminescent signals at 1,200 metres.',
     summary:
-      'Researchers tracked 12k adults: brisk 20-min walks cut resting heart rate faster than weekend marathons. Sleep + steps > heroic workouts.',
-    source: 'PulseCheck',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-    readTime: '1 min',
-    image: img('walk'),
+      'Marine researchers recorded structured light pulses from previously undocumented deep-ocean cephalopods during an autonomous survey.',
+    source: 'Orbit Daily',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+    readTime: '4 min read',
+    image: img('ocean'),
   },
   {
     id: 'm6',
     category: 'entertainment',
-    title: 'INDIE GAME MADE BY 3 FRIENDS SELLS 2M COPIES IN A WEEK',
+    title: 'Why small independent studios are winning the year in interactive storytelling.',
     summary:
-      'No budget, no ads — just a goofy physics co-op game and TikTok clips. Devs say the secret was “make your friends laugh first”.',
-    source: 'PopFlash',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
-    readTime: '1 min',
+      'Lean teams are outperforming bloated releases by focusing on tactile craft, tight pacing, and word-of-mouth discovery.',
+    source: 'Culture Desk',
+    publishedAt: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+    readTime: '3 min read',
     image: img('indiegame'),
   },
-  {
-    id: 'm7',
-    category: 'technology',
-    title: 'BROWSER WAR 3.0: ONE BLOCKS ADS SO HARD SITES BREAK',
-    summary:
-      'The new privacy mode strips 99% trackers but also kills half the comment sections. Users cheer, publishers panic, memers feast.',
-    source: 'ChipWire',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 300).toISOString(),
-    readTime: '2 min',
-    image: img('browser'),
-  },
-  {
-    id: 'm8',
-    category: 'business',
-    title: 'COFFEE PRICE SPIKE? BLAME FROST + YOUR LATTE HABIT',
-    summary:
-      'Arabica futures jumped 18% after Brazilian frost. Cafes mull smaller cups, oat-milk surcharges, and the return of office instant coffee. Tragic.',
-    source: 'MoneyBlast',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 380).toISOString(),
-    readTime: '1 min',
-    image: img('coffee'),
-  },
-  {
-    id: 'm9',
-    category: 'science',
-    title: 'DEEP-SEA ROBOT FILMS GLOWING SQUID NOBODY HAS SEEN ALIVE',
-    summary:
-      'At 1,200m depth, a strawberry squid flashed Morse-like pulses. Biologists think it is private chat — invisible to predators, visible to mates.',
-    source: 'Orbit Daily',
-    publishedAt: new Date(Date.now() - 1000 * 60 * 450).toISOString(),
-    readTime: '2 min',
-    image: img('squid'),
-  },
-]
-
-export const BREAKING_TICKER = [
-  'AI CHIPS GO BRRR',
-  'UNDERDOGS WIN IN 94TH MIN',
-  'COFFEE PRICES +18%',
-  'GLOWING SQUID SPOTTED',
-  'MARKETS BOUNCE BACK',
-  '7K STEPS > 10K?',
 ]

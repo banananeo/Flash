@@ -1,118 +1,102 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { ChevronRight } from 'lucide-react'
 import { useScoreStore } from '../../store/useScoreStore'
 
-function LiveDot() {
-  return (
-    <span className="relative flex h-2.5 w-2.5">
-      <span className="absolute h-full w-full animate-ping rounded-full bg-red-600" />
-      <span className="h-2.5 w-2.5 rounded-full border border-black bg-red-500" />
-    </span>
-  )
-}
-
-function TeamLogo({ logo, short }) {
-  const [dead, setDead] = useState(false)
-  if (logo && !dead) {
-    return (
-      <img
-        src={logo}
-        alt=""
-        onError={() => setDead(true)}
-        className="h-8 w-8 shrink-0 object-contain"
-        loading="lazy"
-      />
-    )
-  }
-  return (
-    <span className="grid h-8 w-8 shrink-0 place-items-center border-2 border-black bg-brutal-yellow font-black text-[10px]">
-      {short}
-    </span>
-  )
-}
-
-// Full-width row — tap opens full modal scoreboard. No like/dislike here.
-export default function MatchCard({ match, index = 0, isFav = false, onToggleFav }) {
+// Clean white rounded editorial match row ("Around the grounds").
+export default function MatchCard({ match, isFav = false, onToggleFav }) {
   const openMatch = useScoreStore((s) => s.openMatch)
   if (!match?.teamA || !match?.teamB) return null
+
   const isLive = match.status === 'live'
+  const isFootball = match.sport === 'football'
 
   return (
-    <motion.div
-      initial={{ y: 24, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 26, delay: Math.min(index * 0.04, 0.3) }}
+    <div
       onClick={() => openMatch(match)}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        // ignore keys from the inner star button (it handles its own
-        // activation — otherwise Enter both pins AND opens the match)
         if (e.target !== e.currentTarget) return
-        if (e.key === 'Enter') openMatch(match)
-        if (e.key === ' ') {
-          e.preventDefault() // don't scroll the page
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
           openMatch(match)
         }
       }}
-      className="flex w-full cursor-pointer items-center gap-3 border-[3px] border-black bg-white p-3 text-left text-black shadow-brutal-sm active:shadow-none dark:border-bone dark:bg-surface dark:text-bone"
+      className="flex w-full cursor-pointer items-center gap-4 rounded-[16px] bg-white px-5 py-4 text-left transition-colors hover:bg-white/80 active:scale-[0.99]"
     >
-      {onToggleFav && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleFav()
-          }}
-          title={isFav ? 'Remove from favorites' : 'Pin as favorite'}
-          aria-label={isFav ? 'Remove from favorites' : 'Pin as favorite'}
-          aria-pressed={!!isFav}
-          className={`grid h-8 w-8 shrink-0 place-items-center border-2 border-black text-base leading-none ${isFav ? 'bg-black text-brutal-yellow' : 'bg-brutal-cream text-black/50'}`}
-        >
-          ★
-        </button>
-      )}
-      {match.sport === 'football' ? (
-        <>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <TeamLogo logo={match.teamA.logo} short={match.teamA.short} />
-            <span className="truncate font-black text-sm">{match.teamA.name}</span>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 border-[3px] border-black bg-black px-2.5 py-1 text-white dark:border-bone">
-            <span className="font-black text-xl leading-none">{match.teamA.score}</span>
-            <span className="flex flex-col items-center">
-              {isLive ? <LiveDot /> : <span className="font-mono text-[9px] font-bold">{match.minute}</span>}
-              <span className="font-mono text-[9px] font-bold text-brutal-yellow">{isLive ? match.minute : 'VS'}</span>
+      <div className="min-w-0 flex-1 space-y-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {match.teamA.logo && (
+              <img
+                src={match.teamA.logo}
+                alt=""
+                loading="lazy"
+                className="h-5 w-5 shrink-0 object-contain"
+              />
+            )}
+            <span className="min-w-0 break-words text-[15px] font-medium leading-tight text-ink">
+              {match.teamA.name}
             </span>
-            <span className="font-black text-xl leading-none">{match.teamB.score}</span>
           </div>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-            <span className="truncate text-right font-black text-sm">{match.teamB.name}</span>
-            <TeamLogo logo={match.teamB.logo} short={match.teamB.short} />
-          </div>
-          <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
-        </>
-      ) : (
-        <>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-black text-sm leading-tight">
-              {match.teamA.short} {match.teamA.score} <span className="font-mono text-[10px] text-black/50 dark:text-bone/50">vs</span> {match.teamB.short} {match.teamB.score}
-            </p>
-            <p className="truncate font-mono text-[10px] font-bold uppercase text-black/60 dark:text-bone/60">
-              {match.meta?.need || match.league}
-            </p>
-          </div>
-          {isLive ? (
-            <span className="flex shrink-0 items-center gap-1 border-2 border-black bg-brutal-mint px-1.5 py-0.5 font-mono text-[10px] font-bold">
-              <LiveDot /> LIVE
+          <span className="shrink-0 font-display text-[17px] font-bold text-ink">
+            {isFootball ? (match.teamA.score ?? '–') : match.teamA.score}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {match.teamB.logo && (
+              <img
+                src={match.teamB.logo}
+                alt=""
+                loading="lazy"
+                className="h-5 w-5 shrink-0 object-contain"
+              />
+            )}
+            <span className="min-w-0 break-words text-[15px] font-medium leading-tight text-ink">
+              {match.teamB.name}
             </span>
-          ) : (
-            <span className="shrink-0 border-2 border-black bg-black px-1.5 py-0.5 font-mono text-[10px] font-bold text-white dark:border-bone">FT</span>
-          )}
-          <ChevronRight size={18} strokeWidth={3} className="shrink-0" />
-        </>
-      )}
-    </motion.div>
+          </div>
+          <span className="shrink-0 font-display text-[17px] font-bold text-ink">
+            {isFootball ? (match.teamB.score ?? '–') : match.teamB.score}
+          </span>
+        </div>
+
+        {!isFootball && (match.meta?.need || match.leagueName) && (
+          <p className="truncate pt-0.5 text-[11px] font-medium text-muted">
+            {match.meta?.need || match.leagueName}
+          </p>
+        )}
+      </div>
+
+      <div className="flex shrink-0 flex-col items-end gap-2 pl-2">
+        {isLive ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-live px-2.5 py-0.5 text-[11px] font-bold text-white">
+            <span className="h-1.5 w-1.5 rounded-full bg-white" />
+            {isFootball ? match.minute : 'LIVE'}
+          </span>
+        ) : (
+          <span className="text-[12px] font-semibold text-muted">
+            {isFootball ? match.minute : match.status === 'scheduled' ? 'SCHED' : 'FT'}
+          </span>
+        )}
+
+        {onToggleFav && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleFav()
+            }}
+            aria-label={isFav ? 'Unfollow team' : 'Follow team'}
+            aria-pressed={isFav}
+            className={`text-[14px] leading-none transition-colors ${
+              isFav ? 'text-ink' : 'text-hairline hover:text-muted'
+            }`}
+          >
+            ★
+          </button>
+        )}
+      </div>
+    </div>
   )
 }

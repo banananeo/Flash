@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bell, BellOff, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useReminderStore } from '../store/useReminderStore'
 import { useScoreStore } from '../store/useScoreStore'
 import { useNewsStore } from '../store/useNewsStore'
 
-// Morning news reminder: modal + optional system popup (both only fire
-// while the app is open — no backend exists to wake a closed app).
-// Minute-tick lives here so App stays untouched apart from mounting.
+// Editorial Morning Briefing reminder sheet
 export default function MorningReminder() {
   const visible = useReminderStore((s) => s.visible)
   const enabled = useReminderStore((s) => s.enabled)
@@ -37,16 +35,6 @@ export default function MorningReminder() {
     }
   }, [visible])
 
-  // lock background scroll while the reminder modal is open
-  useEffect(() => {
-    if (!visible) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [visible])
-
   const enablePopups = async () => {
     try {
       const p = await Notification.requestPermission()
@@ -59,7 +47,7 @@ export default function MorningReminder() {
   const fmtHour = (h) => {
     const ap = h >= 12 ? 'PM' : 'AM'
     const n = h % 12 === 0 ? 12 : h % 12
-    return `${n} ${ap}`
+    return `${n}:00 ${ap}`
   }
 
   return (
@@ -71,70 +59,103 @@ export default function MorningReminder() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={dismiss}
-            className="fixed inset-0 z-50 bg-black/60"
+            className="fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]"
           />
-          <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center p-4">
+          <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-y-auto p-5">
             <motion.div
-              initial={{ scale: 0.85, rotate: -2, y: 30, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, y: 0, opacity: 1 }}
-              exit={{ scale: 0.9, rotate: 2, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-              className="card-brutal pointer-events-auto w-full max-w-sm bg-brutal-cream p-4 dark:border-bone dark:bg-surface dark:text-bone sm:p-5"
+              initial={{ scale: 0.94, y: 16, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.96, y: 10, opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="pointer-events-auto w-full max-w-sm rounded-[22px] bg-paper p-6 shadow-xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Morning briefing reminder"
             >
               <div className="flex items-center justify-between">
-                <span className="badge-brutal bg-brutal-yellow text-black">☀️ Morning brief</span>
-                <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={dismiss} className="btn-brutal bg-white p-2 text-black dark:border-bone dark:bg-raised dark:text-bone" aria-label="Dismiss">
-                  <X size={18} strokeWidth={3} />
-                </motion.button>
+                <span className="rounded-full bg-pulse px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-ink">
+                  MORNING BRIEF
+                </span>
+                <button
+                  type="button"
+                  onClick={dismiss}
+                  aria-label="Dismiss"
+                  className="grid h-8 w-8 place-items-center rounded-full text-muted transition-colors hover:bg-sage hover:text-ink"
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              <p className="mt-3 font-black text-2xl leading-tight">
-                Fresh headlines are live.
+              <p className="mt-4 text-[24px] font-semibold leading-tight text-ink">
+                Your morning, sorted.
               </p>
-              <p className="mt-1 font-mono text-[11px] font-bold uppercase opacity-60">
-                {(cards || []).length} stories waiting • 2-min catch-up
+              <p className="mt-1.5 text-[13px] text-muted">
+                {(cards || []).length} stories in today’s edit · less noise, more signal.
               </p>
 
-              <motion.button
-                whileTap={{ scale: 0.96 }}
+              <button
+                type="button"
                 onClick={() => {
                   read()
                   setView('news')
                 }}
-                className="btn-brutal mt-3 w-full bg-black px-4 py-2.5 text-sm text-white dark:border-bone"
+                className="mt-5 h-11 w-full rounded-full bg-pulse text-[13px] font-bold text-ink transition-opacity hover:opacity-90"
               >
-                Read the news
-              </motion.button>
+                Open briefing
+              </button>
 
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button onClick={snooze} className="btn-brutal bg-white px-2 py-1.5 text-xs text-black dark:border-bone dark:bg-raised dark:text-bone">
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={snooze}
+                  className="h-10 rounded-full bg-sage text-[12px] font-semibold text-ink transition-colors hover:bg-hairline"
+                >
                   Snooze 1h
                 </button>
-                <button onClick={() => setEnabled(false)} className="btn-brutal flex items-center justify-center gap-1 bg-brutal-red px-2 py-1.5 text-xs text-white">
-                  <BellOff size={13} strokeWidth={3} /> Turn off
+                <button
+                  type="button"
+                  onClick={() => setEnabled(!enabled)}
+                  className="h-10 rounded-full bg-white text-[12px] font-semibold text-muted transition-colors hover:text-ink"
+                >
+                  {enabled ? 'Turn off' : 'Turn on'}
                 </button>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-2 border-[3px] border-black bg-white px-2 py-1.5 text-black dark:border-bone dark:bg-raised dark:text-bone">
-                <span className="flex items-center gap-1 font-mono text-[11px] font-bold uppercase">
-                  <Bell size={13} strokeWidth={3} /> Remind at
+              <div className="mt-4 flex items-center justify-between rounded-[14px] bg-white px-4 py-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted">
+                  Remind at
                 </span>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => bumpHour(-1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Earlier hour">−</button>
-                  <span className="min-w-14 text-center font-black text-sm">{fmtHour(hour)}</span>
-                  <button onClick={() => bumpHour(1)} className="border-2 border-black px-1.5 font-black dark:border-bone" aria-label="Later hour">+</button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => bumpHour(-1)}
+                    aria-label="Earlier hour"
+                    className="grid h-7 w-7 place-items-center rounded-full bg-sage font-bold text-ink"
+                  >
+                    −
+                  </button>
+                  <span className="min-w-16 text-center font-display text-[14px] font-bold text-ink">
+                    {fmtHour(hour)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => bumpHour(1)}
+                    aria-label="Later hour"
+                    className="grid h-7 w-7 place-items-center rounded-full bg-sage font-bold text-ink"
+                  >
+                    +
+                  </button>
                 </div>
               </div>
 
               {canNotify && (
-                <button onClick={enablePopups} className="btn-brutal mt-2 w-full bg-brutal-mint px-2 py-1.5 text-xs text-black">
-                  Enable system popups too
+                <button
+                  type="button"
+                  onClick={enablePopups}
+                  className="mt-3 h-10 w-full rounded-full bg-sage-tint text-[12px] font-bold text-ink"
+                >
+                  Enable browser notifications
                 </button>
-              )}
-              {!enabled && (
-                <p className="mt-2 text-center font-mono text-[10px] font-bold uppercase opacity-60">
-                  Reminders are off — bell icon re-enables
-                </p>
               )}
             </motion.div>
           </div>

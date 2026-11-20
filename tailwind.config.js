@@ -1,68 +1,35 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Refined brutalist-after-dark: near-black ink, elevated surface,
-        // bone for borders/text on dark. Accent fills stay identical.
-        ink: '#0D0D12',
-        surface: '#17171E',
-        raised: '#20202A',
-        bone: '#F5F1E6',
-        brutal: {
-          yellow: '#FFDE59',
-          pink: '#FF6B9D',
-          mint: '#00D9A5',
-          blue: '#4D7CFE',
-          purple: '#A78BFA',
-          lime: '#B9FF66',
-          orange: '#FF6B35',
-          red: '#FF4D4D',
-          cream: '#FFF6E9',
-          paper: '#FFFDF5',
-        },
+        // Nordic Daylight palette
+        paper: '#F8FAFC',
+        ink: '#0F172A',
+        pulse: '#0D9488',
+        live: '#E11D48',
+        'brand-strong': '#0F766E',
+        sage: '#F1F5F9',
+        'sage-card': '#FFFFFF',
+        'sage-tint': '#F0FDFA',
+        'sage-leader': '#CCFBF1',
+        muted: '#64748B',
+        hairline: '#E2E8F0',
+        'hairline-soft': '#CBD5E1',
+        'ink-muted': '#CBD5E1',
+        'ink-subtle': '#CBD5E1',
+        'ink-track': '#334155',
+        'ink-divider': '#475569',
       },
       fontFamily: {
-        grotesk: ['"Space Grotesk"', 'sans-serif'],
-        black: ['"Archivo Black"', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'monospace'],
+        sans: ['Manrope', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Space Grotesk"', 'Manrope', 'sans-serif'],
       },
-      boxShadow: {
-        'brutal-xs': '2px 2px 0px 0px #000',
-        'brutal-sm': '4px 4px 0px 0px #000',
-        brutal: '8px 8px 0px 0px #000',
-        'brutal-lg': '12px 12px 0px 0px #000',
-      },
-      keyframes: {
-        marquee: {
-          '0%': { transform: 'translateX(0)' },
-          '100%': { transform: 'translateX(-50%)' },
-        },
-        wiggle: {
-          '0%, 100%': { transform: 'rotate(-2deg)' },
-          '50%': { transform: 'rotate(2deg)' },
-        },
-        floaty: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-8px)' },
-        },
-        spinSlow: {
-          to: { transform: 'rotate(360deg)' },
-        },
-        popIn: {
-          '0%': { transform: 'scale(0) rotate(-10deg)', opacity: '0' },
-          '70%': { transform: 'scale(1.2) rotate(3deg)', opacity: '1' },
-          '100%': { transform: 'scale(1) rotate(0deg)', opacity: '1' },
-        },
-      },
-      animation: {
-        marquee: 'marquee 60s linear infinite',
-        wiggle: 'wiggle 0.5s ease-in-out infinite',
-        floaty: 'floaty 3s ease-in-out infinite',
-        'spin-slow': 'spinSlow 12s linear infinite',
-        'pop-in': 'popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both',
+      borderRadius: {
+        card: '16px',
+        hero: '20px',
+        'hero-lg': '22px',
       },
     },
   },

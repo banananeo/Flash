@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X } from 'lucide-react'
 import { useScoreStore } from '../../store/useScoreStore'
 import { FootballBoard, CricketBoard } from './Boards'
 import { fetchCricketDetail } from '../../lib/cricket'
+import { fetchFootballDetail } from '../../lib/football'
+import backIcon from '../../assets/icons/back.svg'
+import shareIcon from '../../assets/icons/share.svg'
 
-// Modal scoreboard — full detail on tap, Esc/backdrop to close.
+// 06 · Match centre — full-bleed editorial match sheet for Football & Cricket.
 export default function ScoreboardModal() {
   const selected = useScoreStore((s) => s.selected)
   const closeMatch = useScoreStore((s) => s.closeMatch)
-  const [detail, setDetail] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [reqState, setReqState] = useState({ key: null, data: null, done: false })
+  const [copied, setCopied] = useState(false)
   const panelRef = useRef(null)
   const lastFocus = useRef(null)
 
@@ -23,15 +25,11 @@ export default function ScoreboardModal() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selected, closeMatch])
 
-  // focus into the modal on open, lock background scroll, restore on close
   useEffect(() => {
-    if (!selected) return
+    if (!selected) return undefined
     lastFocus.current = document.activeElement
     panelRef.current?.focus({ preventScroll: true })
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     return () => {
-      document.body.style.overflow = prev
       if (lastFocus.current?.focus) {
         try {
           lastFocus.current.focus({ preventScroll: true })
@@ -40,36 +38,36 @@ export default function ScoreboardModal() {
     }
   }, [selected])
 
-  // fetch richer cricket detail when a cricket card opens.
-  // request id: opening B while A is in flight must not let A's late
-  // reply overwrite B's scoreboard (or setState after close).
+  const reqKey = selected?.rawId
+    ? `${selected.sport}:${selected.rawId}:${selected.seriesId || selected.leagueSlug || ''}`
+    : null
+
+  // Fetch rich Match Centre detail for BOTH Football & Cricket from ESPN APIs
   useEffect(() => {
-    if (selected?.sport !== 'cricket' || !selected?.rawId) {
-      setDetail(null)
-      setLoading(false)
-      return
-    }
-    const wantId = selected.rawId
+    if (!reqKey || !selected?.rawId) return undefined
     let alive = true
-    setDetail(null)
-    setLoading(true)
-    fetchCricketDetail(wantId)
+    const req =
+      selected.sport === 'cricket'
+        ? fetchCricketDetail(selected.rawId, selected.seriesId)
+        : fetchFootballDetail(selected.rawId, selected.leagueSlug)
+
+    req
       .then((d) => {
-        if (alive && useScoreStore.getState().selected?.rawId === wantId) setDetail(d)
+        if (alive) setReqState({ key: reqKey, data: d, done: true })
       })
       .catch(() => {
-        if (alive) setDetail(null)
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
+        if (alive) setReqState({ key: reqKey, data: null, done: true })
       })
     return () => {
       alive = false
     }
-  }, [selected?.sport, selected?.rawId])
+  }, [reqKey, selected?.sport, selected?.rawId, selected?.seriesId, selected?.leagueSlug])
 
-  // restore from ?match= deep-link on load. Live lists arrive async, so if
-  // the id isn't found yet, retry on the next football/cricket update.
+  const matched = Boolean(reqKey) && reqState.key === reqKey
+  const detail = matched ? reqState.data : null
+  const loading = Boolean(reqKey) && (!matched || !reqState.done)
+
+  // Restore from ?match= deep-link
   useEffect(() => {
     const tryRestore = () => {
       try {
@@ -92,53 +90,84 @@ export default function ScoreboardModal() {
       }
     })
     return unsub
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleShare = async () => {
+    if (!selected) return
+    const title = `${selected.teamA?.name || ''} vs ${selected.teamB?.name || ''} — flash`
+    const url = window.location.href
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, url })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* ignore */ }
+  }
 
   return (
     <AnimatePresence>
       {selected && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={closeMatch}
-            className="fixed inset-0 z-50 bg-black/60"
-          />
-          <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4" onClick={closeMatch}>
-            <motion.div
-              ref={panelRef}
-              tabIndex={-1}
-              role="dialog"
-              aria-modal="true"
-              aria-label={`${selected.teamA?.short ?? 'Match'} vs ${selected.teamB?.short ?? ''} scoreboard`}
-              initial={{ scale: 0.85, rotate: -2, y: 30, opacity: 0 }}
-              animate={{ scale: 1, rotate: 0, y: 0, opacity: 1 }}
-              exit={{ scale: 0.9, rotate: 2, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 26 }}
-              onClick={(e) => e.stopPropagation()}
-              className="card-brutal w-full max-w-lg bg-brutal-cream p-4 outline-none dark:border-bone dark:bg-surface dark:text-bone sm:p-5"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="badge-brutal bg-black text-white">
-                  {selected.sport === 'football' ? '⚽ FOOTBALL BOARD' : '🏏 CRICKET BOARD'}
-                </span>
-                <motion.button whileTap={{ scale: 0.85, rotate: 90 }} onClick={closeMatch} className="btn-brutal bg-white p-2 text-black dark:border-bone dark:bg-raised dark:text-bone" aria-label="Close">
-                  <X size={20} strokeWidth={3} />
-                </motion.button>
-              </div>
-              {selected.sport === 'football' ? (
-                <FootballBoard match={selected} />
-              ) : (
-                <CricketBoard match={selected} detail={detail} />
-              )}
-              {loading && (
-                <p className="mt-2 text-center font-mono text-[11px] font-bold uppercase">Loading full scoreboard…</p>
-              )}
-            </motion.div>
+        <motion.div
+          ref={panelRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${selected.teamA?.name ?? 'Match'} vs ${selected.teamB?.name ?? ''} match centre`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-paper focus-visible:outline-none"
+        >
+          {/* Sticky Match Centre Header */}
+          <div className="sticky top-0 z-10 border-b border-hairline/70 bg-paper/95 backdrop-blur-sm">
+            <div className="mx-auto flex h-[60px] max-w-[680px] items-center justify-between px-6">
+              <button
+                type="button"
+                onClick={closeMatch}
+                aria-label="Back to scores"
+                className="-ml-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
+              >
+                <img src={backIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
+              </button>
+
+              <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                MATCH CENTRE
+              </span>
+
+              <button
+                type="button"
+                onClick={handleShare}
+                aria-label="Share match"
+                className="-mr-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
+              >
+                <img src={shareIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
+              </button>
+            </div>
           </div>
-        </>
+
+          <motion.div
+            initial={{ y: 16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.25 }}
+            className="mx-auto max-w-[680px] px-6 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6"
+          >
+            {copied && (
+              <p className="mx-auto mb-3 w-fit rounded-full bg-pulse px-3 py-1 text-[11px] font-bold text-ink">
+                Link copied
+              </p>
+            )}
+
+            {selected.sport === 'football' ? (
+              <FootballBoard match={selected} detail={detail} loading={loading} />
+            ) : (
+              <CricketBoard match={selected} detail={detail} loading={loading} />
+            )}
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   )

@@ -17,8 +17,6 @@ const GNEWS_CATEGORY = new Set([
 
 function getKey() {
   return (
-    process.env.VITE_GNEWS ||
-    process.env.GNEWS_API_KEY ||
     process.env.GNEWS ||
     ''
   );
@@ -55,6 +53,7 @@ export default async function handler(req, res) {
     const upstream = await fetch(`https://gnews.io/api/v4/top-headlines?${params}`);
     const body = await upstream.text();
     res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=60');
+    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
     return res.status(upstream.status).send(body);
   } catch (e) {
     return res.status(502).json({ error: `GNews upstream unreachable: ${e.message}` });
