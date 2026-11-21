@@ -49,17 +49,40 @@ function computeDateRangeParam(baseDateStr = '', daysAhead = 7) {
   return `${fmt(start)}-${fmt(end)}`;
 }
 
+const IST_TZ = 'Asia/Kolkata';
+
+function formatIstDateISO(d) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+function formatIstTime(d) {
+  const t = d
+    .toLocaleTimeString('en-IN', {
+      timeZone: IST_TZ,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+    .replace(/\b(am|pm)\b/i, (m) => m.toUpperCase());
+  return `${t} IST`;
+}
+
 function formatDateAndKickoff(isoDate) {
   if (!isoDate) return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
   try {
     const d = new Date(isoDate);
     if (!Number.isFinite(d.getTime())) return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
-    const dateISO = d.toISOString().slice(0, 10);
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const wk = d.toLocaleDateString('en-GB', { weekday: 'short' });
-    const day = String(d.getDate()).padStart(2, '0');
-    const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+    const dateISO = formatIstDateISO(d);
+    const todayIso = formatIstDateISO(new Date());
+    const timeStr = formatIstTime(d);
+    const wk = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, weekday: 'short' });
+    const day = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, day: '2-digit' });
+    const mon = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, month: 'short' });
     const dateLabel = dateISO === todayIso ? 'Today' : `${wk} ${day} ${mon}`;
     return {
       dateISO,
@@ -69,6 +92,15 @@ function formatDateAndKickoff(isoDate) {
   } catch {
     return { dateISO: '', dateLabel: '', kickoffLabel: 'TBD' };
   }
+}
+
+function readScoreText(raw) {
+  if (raw == null) return '';
+  if (typeof raw === 'object') {
+    const val = raw.displayValue ?? raw.value ?? raw.score ?? '';
+    return val === '' || val == null ? '' : String(val).trim();
+  }
+  return String(raw).trim();
 }
 
 const FETCH_HEADERS = {
@@ -156,7 +188,7 @@ function formatKickoff(isoDate) {
   try {
     const d = new Date(isoDate);
     if (!Number.isFinite(d.getTime())) return 'TBD';
-    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return formatIstTime(d);
   } catch {
     return 'TBD';
   }
@@ -399,6 +431,7 @@ function parseLineups(rosters) {
       fullName: p.athlete?.displayName || '',
       jersey: p.jersey || '',
       pos: p.position?.abbreviation || '',
+      positionName: p.position?.name || '',
       starter: Boolean(p.starter),
       subbedIn: Boolean(p.subbedIn),
       subbedOut: Boolean(p.subbedOut),
@@ -518,24 +551,31 @@ export async function fetchEspnFootballDetail(rawIdInput, rawLeagueInput) {
         ? 'FULL TIME'
         : comp?.status?.type?.shortDetail || 'SCHEDULED';
 
+  const scheduledIst = comp?.date ? formatDateAndKickoff(comp.date).kickoffLabel : '';
+
   const header = {
     league: summary?.header?.league?.name || leagueSlug.toUpperCase(),
     round: comp?.notes?.[0]?.headline || summary?.header?.season?.name || '',
     status,
-    clock: status === 'live' ? clock : comp?.status?.type?.shortDetail || '',
+    clock:
+      status === 'live'
+        ? clock
+        : status === 'scheduled' && scheduledIst && scheduledIst !== 'TBD'
+          ? scheduledIst
+          : comp?.status?.type?.shortDetail || '',
     halfLabel,
     venue: venueParts.join(', '),
     home: {
       name: homeComp.team?.displayName || 'Home',
       short: homeComp.team?.abbreviation || shortOf(homeComp.team?.displayName),
-      score: homeComp.score ?? '0',
+      score: readScoreText(homeComp.score) || (status === 'scheduled' ? null : '0'),
       logo: homeComp.team?.logos?.[0]?.href || '',
       color: homeComp.team?.color ? `#${String(homeComp.team.color).replace(/^#/, '')}` : '#D75043',
     },
     away: {
       name: awayComp.team?.displayName || 'Away',
       short: awayComp.team?.abbreviation || shortOf(awayComp.team?.displayName),
-      score: awayComp.score ?? '0',
+      score: readScoreText(awayComp.score) || (status === 'scheduled' ? null : '0'),
       logo: awayComp.team?.logos?.[0]?.href || '',
       color: awayComp.team?.color ? `#${String(awayComp.team.color).replace(/^#/, '')}` : '#5578D8',
     },
@@ -549,4 +589,176 @@ export async function fetchEspnFootballDetail(rawIdInput, rawLeagueInput) {
     lineups,
     events: [...events].reverse(),
   };
+}
+
+function extractScheduleEvents(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.events)) return payload.events;
+  if (Array.isArray(payload?.schedule?.events)) return payload.schedule.events;
+  if (Array.isArray(payload?.team?.events)) return payload.team.events;
+  return [];
+}
+
+function normalizeFinishedFootballEvent(event, teamId) {
+  const competition = event?.competitions?.[0] || event?.competition || {};
+  const competitors = Array.isArray(event?.competitors)
+    ? event.competitors
+    : Array.isArray(competition?.competitors)
+      ? competition.competitors
+      : [];
+  const own = competitors.find((entry) => String(entry?.id || entry?.team?.id || '') === String(teamId));
+  const opponent = competitors.find((entry) => entry !== own);
+  const state = String(event?.status?.type?.state || competition?.status?.type?.state || '').toLowerCase();
+  const date = event?.date || competition?.date || '';
+  const ownScoreText = readScoreText(own?.score);
+  const opponentScoreText = readScoreText(opponent?.score);
+  const ownScore = Number(own?.score?.value ?? ownScoreText);
+  const opponentScore = Number(opponent?.score?.value ?? opponentScoreText);
+  const dateMs = Date.parse(date);
+  if (!own || !opponent || state !== 'post' || !Number.isFinite(dateMs)) return null;
+
+  let result = '';
+  if (own.winner === true) result = 'W';
+  else if (opponent.winner === true) result = 'L';
+  else if (Number.isFinite(ownScore) && Number.isFinite(opponentScore)) {
+    result = ownScore === opponentScore ? 'D' : ownScore > opponentScore ? 'W' : 'L';
+  }
+  if (!result) return null;
+
+  const historicalHome = competitors.find((entry) => entry?.homeAway === 'home') || competitors[0];
+  const historicalAway = competitors.find((entry) => entry?.homeAway === 'away') || competitors.find((entry) => entry !== historicalHome);
+
+  return {
+    date: new Date(dateMs).toISOString(),
+    opponent: opponent?.team?.displayName || opponent?.team?.name || opponent?.displayName || opponent?.name || 'Opponent',
+    score: `${ownScoreText || '–'}–${opponentScoreText || '–'}`,
+    result,
+    opponentId: String(opponent?.id || opponent?.team?.id || ''),
+    homeName: historicalHome?.team?.displayName || historicalHome?.displayName || historicalHome?.name || '',
+    awayName: historicalAway?.team?.displayName || historicalAway?.displayName || historicalAway?.name || '',
+    homeScore: readScoreText(historicalHome?.score),
+    awayScore: readScoreText(historicalAway?.score),
+  }
+}
+
+function findStandingEntries(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 7) return [];
+  if (!Array.isArray(value)) {
+    if (Array.isArray(value.entries) && value.entries.length) return value.entries;
+    if (value.standings && Array.isArray(value.standings.entries)) return value.standings.entries;
+    for (const child of Object.values(value)) {
+      const found = findStandingEntries(child, depth + 1);
+      if (found.length) return found;
+    }
+  }
+  return [];
+}
+
+function normalizeStandingEntry(entry) {
+  const stats = Array.isArray(entry?.stats) ? entry.stats : [];
+  const stat = (names) => {
+    const found = stats.find((item) => names.includes(String(item?.name || '').toLowerCase()));
+    return found?.displayValue ?? found?.value ?? '';
+  };
+  const rank = stat(['rank', 'position', 'playoffseed']);
+  const points = stat(['points', 'overallpoints']);
+  const played = stat(['gamesplayed', 'played', 'overallgamesplayed']);
+  const wins = stat(['wins', 'overallwins']);
+  const draws = stat(['ties', 'draws', 'overalltied']);
+  const losses = stat(['losses', 'overalllosses']);
+  if (!rank && !points && !played) return null;
+  return {
+    rank: rank ? String(rank) : '',
+    points: points ? String(points) : '',
+    played: played ? String(played) : '',
+    record: [wins, draws, losses].every((value) => value !== '')
+      ? `${wins}-${draws}-${losses}`
+      : '',
+  };
+}
+
+export async function fetchEspnFootballPreview({
+  leagueSlug,
+  homeId,
+  awayId,
+  homeName = 'Home',
+  awayName = 'Away',
+  date = '',
+}) {
+  const league = String(leagueSlug || '').trim();
+  const homeTeamId = String(homeId || '').trim();
+  const awayTeamId = String(awayId || '').trim();
+  const targetMs = Date.parse(date);
+  if (!/^[a-z0-9._-]+$/i.test(league) || !/^\d+$/.test(homeTeamId) || !/^\d+$/.test(awayTeamId)) {
+    return { form: { home: [], away: [] }, headToHead: [], standings: null };
+  }
+
+  const teamScheduleUrl = (id) =>
+    `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/teams/${encodeURIComponent(id)}/schedule`;
+  const standingsUrl = `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/standings`;
+  const [homeScheduleResult, awayScheduleResult, standingsResult] = await Promise.allSettled([
+    fetchJson(teamScheduleUrl(homeTeamId), { timeoutMs: 9000, retries: 0 }),
+    fetchJson(teamScheduleUrl(awayTeamId), { timeoutMs: 9000, retries: 0 }),
+    fetchJson(standingsUrl, { timeoutMs: 9000, retries: 0 }),
+  ]);
+
+  const scheduleEvents = new Map();
+  for (const result of [homeScheduleResult, awayScheduleResult]) {
+    if (result.status !== 'fulfilled') continue;
+    for (const event of extractScheduleEvents(result.value)) {
+      const id = String(event?.id || '');
+      if (id) scheduleEvents.set(id, event);
+    }
+  }
+
+  const beforeTarget = (event) => {
+    const parsed = normalizeFinishedFootballEvent(event, homeTeamId);
+    return parsed && (!Number.isFinite(targetMs) || Date.parse(parsed.date) < targetMs) ? parsed : null;
+  };
+  const homeForm = [...scheduleEvents.values()]
+    .map((event) => beforeTarget(event))
+    .filter(Boolean)
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, opponent, score, result }) => ({ date: resultDate, opponent, score, result }));
+
+  const awayEvents = new Map();
+  if (awayScheduleResult.status === 'fulfilled') {
+    for (const event of extractScheduleEvents(awayScheduleResult.value)) {
+      const id = String(event?.id || '');
+      if (id) awayEvents.set(id, event);
+    }
+  }
+  const awayForm = [...awayEvents.values()]
+    .map((event) => normalizeFinishedFootballEvent(event, awayTeamId))
+    .filter((event) => event && (!Number.isFinite(targetMs) || Date.parse(event.date) < targetMs))
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, opponent, score, result }) => ({ date: resultDate, opponent, score, result }));
+
+  const headToHead = [...scheduleEvents.values()]
+    .map((event) => normalizeFinishedFootballEvent(event, homeTeamId))
+    .filter((event) => event?.opponentId === awayTeamId && (!Number.isFinite(targetMs) || Date.parse(event.date) < targetMs))
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, homeName: eventHome, awayName: eventAway, homeScore, awayScore }) => ({
+      date: resultDate,
+      home: eventHome || homeName,
+      away: eventAway || awayName,
+      score: `${homeScore || '–'}–${awayScore || '–'}`,
+    }));
+
+  let standings = null;
+  if (standingsResult.status === 'fulfilled') {
+    const entries = findStandingEntries(standingsResult.value);
+    const findEntry = (teamId) => entries.find((entry) => String(entry?.team?.id || entry?.id || '') === teamId);
+    standings = {
+      competition: standingsResult.value?.name || standingsResult.value?.header?.name || '',
+      home: normalizeStandingEntry(findEntry(homeTeamId)),
+      away: normalizeStandingEntry(findEntry(awayTeamId)),
+    };
+    if (!standings.home && !standings.away) standings = null;
+  }
+
+  return { form: { home: homeForm, away: awayForm }, headToHead, standings };
 }

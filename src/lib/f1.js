@@ -189,6 +189,37 @@ export function deriveNextRace(races, nowMs = Date.now()) {
   return null
 }
 
+const F1_SESSION_NAMES = {
+  fp1: 'Practice 1',
+  fp2: 'Practice 2',
+  fp3: 'Practice 3',
+  sprintQuali: 'Sprint Qualifying',
+  sprint: 'Sprint',
+  quali: 'Qualifying',
+  race: 'Race',
+}
+
+export function deriveNextSession(races, nowMs = Date.now()) {
+  const candidates = []
+  for (const race of races || []) {
+    for (const [code, label] of Object.entries(F1_SESSION_NAMES)) {
+      const date = code === 'race' ? race?.dateUTC : race?.sessions?.[code]
+      const dateUTC = date instanceof Date ? date : date ? new Date(date) : null
+      if (!dateUTC || !Number.isFinite(dateUTC.getTime()) || dateUTC.getTime() <= nowMs) continue
+      candidates.push({
+        code,
+        label,
+        dateUTC,
+        round: race.round,
+        raceName: race.name || 'Grand Prix',
+        circuit: race.circuit || race.locality || '',
+      })
+    }
+  }
+  candidates.sort((a, b) => a.dateUTC.getTime() - b.dateUTC.getTime())
+  return candidates[0] || null
+}
+
 export function countdownParts(targetMs, nowMs = Date.now()) {
   const diff = Math.max(0, targetMs - nowMs)
   const d = Math.floor(diff / 86400000)

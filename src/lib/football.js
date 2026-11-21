@@ -17,25 +17,30 @@ function friendlyFootballError(e) {
   return e
 }
 
-export async function fetchFootballLive(dateStr = '') {
+export async function fetchFootballLive(dateStr = '', { force = false } = {}) {
   const cleanDate = String(dateStr || '').replace(/-/g, '')
-  const cacheKey = `live-cache-football-v2-${cleanDate || 'today'}`
-  try {
-    const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
-    if (
-      cached &&
-      cached.provider === 'espn' &&
-      Date.now() - cached.ts < 60 * 1000 &&
-      cached.matches?.length
-    ) {
-      return { matches: cached.matches, cached: true }
-    }
-  } catch { /* ignore */ }
+  const cacheKey = `live-cache-football-v3-${cleanDate || 'today'}`
+  if (!force) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
+      if (
+        cached &&
+        cached.provider === 'espn' &&
+        Date.now() - cached.ts < 60 * 1000 &&
+        cached.matches?.length
+      ) {
+        return { matches: cached.matches, cached: true }
+      }
+    } catch { /* ignore */ }
+  }
 
-  const qs = cleanDate ? `?date=${encodeURIComponent(cleanDate)}` : ''
+  const params = new URLSearchParams()
+  if (cleanDate) params.set('date', cleanDate)
+  if (force) params.set('t', String(Date.now()))
+  const qs = params.toString() ? `?${params}` : ''
   let res
   try {
-    res = await fetch(`/api/football/live${qs}`)
+    res = await fetch(`/api/football/live${qs}`, force ? { cache: 'no-store' } : undefined)
     if (res.status === 404) throw new Error('Football API route not found')
   } catch (e) {
     throw friendlyFootballError(e)

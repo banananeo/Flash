@@ -3,8 +3,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
 import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl } from './api/_extract.js'
-import { fetchEspnLiveMatches, fetchEspnMatchDetail } from './api/_cricket.js'
-import { fetchEspnFootballMatches, fetchEspnFootballDetail, sanitizeDateParam } from './api/_football.js'
+import { fetchEspnLiveMatches, fetchEspnMatchDetail, fetchEspnCricketPreview } from './api/_cricket.js'
+import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam } from './api/_football.js'
 import { fetchF1Telemetry } from './api/_f1telemetry.js'
 import widgetScoresHandler from './api/widget-scores.js'
 
@@ -85,7 +85,7 @@ function cricketDevMiddleware() {
             const up = u.searchParams.get('upcoming')
             const upcoming = up == null ? !safeDate : up === '1' || up === 'true'
             const matches = await fetchEspnLiveMatches(safeDate, { upcoming })
-            res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
+            res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
             send(200, { provider: 'espn', date: safeDate || 'today', matches })
             return
           }
@@ -129,7 +129,7 @@ function footballDevMiddleware() {
             const up = u.searchParams.get('upcoming')
             const upcoming = up == null ? !date : up === '1' || up === 'true'
             const matches = await fetchEspnFootballMatches(date, { upcoming })
-            res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
+            res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
             send(200, { provider: 'espn', date: date || 'today', matches })
             return
           }
@@ -148,6 +148,57 @@ function footballDevMiddleware() {
           next()
         } catch (e) {
           send(e?.status || 502, { error: e?.message || 'ESPN Football failed' })
+        }
+      })
+    },
+  }
+}
+
+// Dev-only parity for /api/preview (ESPN football/cricket match context)
+function previewDevMiddleware() {
+  return {
+    name: 'match-preview-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/preview', async (req, res) => {
+        const send = (status, obj) => {
+          res.statusCode = status
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(obj))
+        }
+        try {
+          if (req.method !== 'GET') {
+            send(405, { error: 'Method not allowed' })
+            return
+          }
+          const u = new URL(req.url, 'http://localhost')
+          const common = {
+            homeId: u.searchParams.get('homeId') || '',
+            awayId: u.searchParams.get('awayId') || '',
+            homeName: u.searchParams.get('homeName') || 'Home',
+            awayName: u.searchParams.get('awayName') || 'Away',
+            date: u.searchParams.get('date') || '',
+          }
+          const sport = u.searchParams.get('sport') || ''
+          let preview
+          if (sport === 'football') {
+            preview = await fetchEspnFootballPreview({
+              ...common,
+              leagueSlug: u.searchParams.get('league') || '',
+            })
+          } else if (sport === 'cricket') {
+            preview = await fetchEspnCricketPreview({
+              ...common,
+              seriesId: u.searchParams.get('series') || '',
+              format: u.searchParams.get('format') || '',
+            })
+          } else {
+            send(400, { error: 'Unsupported preview sport' })
+            return
+          }
+          res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1800')
+          send(200, { provider: 'espn', ...preview })
+        } catch (e) {
+          send(e?.status || 502, { error: e?.message || 'Match preview unavailable' })
         }
       })
     },
@@ -263,6 +314,7 @@ export default defineConfig(() => {
       newsDevMiddleware(),
       cricketDevMiddleware(),
       footballDevMiddleware(),
+      previewDevMiddleware(),
       f1TelemetryDevMiddleware(),
       widgetScoresDevMiddleware(),
       VitePWA({
@@ -315,6 +367,11 @@ export default defineConfig(() => {
               urlPattern: /\/api\/football\/.*/i,
               handler: 'NetworkFirst',
               options: { cacheName: 'espn-football', expiration: { maxEntries: 20, maxAgeSeconds: 60 } },
+            },
+            {
+              urlPattern: /\/api\/preview.*/i,
+              handler: 'NetworkFirst',
+              options: { cacheName: 'match-preview', expiration: { maxEntries: 20, maxAgeSeconds: 600 } },
             },
             {
               urlPattern: /\/api\/f1standings.*/i,

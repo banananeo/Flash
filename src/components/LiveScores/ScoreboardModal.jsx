@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { RefreshCw } from 'lucide-react'
 import { useScoreStore } from '../../store/useScoreStore'
 import { FootballBoard, CricketBoard } from './Boards'
 import { fetchCricketDetail } from '../../lib/cricket'
 import { fetchFootballDetail } from '../../lib/football'
+import { fetchMatchPreview } from '../../lib/preview'
 import backIcon from '../../assets/icons/back.svg'
 import shareIcon from '../../assets/icons/share.svg'
 
@@ -11,7 +13,11 @@ import shareIcon from '../../assets/icons/share.svg'
 export default function ScoreboardModal() {
   const selected = useScoreStore((s) => s.selected)
   const closeMatch = useScoreStore((s) => s.closeMatch)
+  const refreshMatch = useScoreStore((s) => s.refreshMatch)
+  const isRefreshing = useScoreStore((s) => Boolean(s.refreshingMatches?.[selected?.id]))
+  const refreshTick = useScoreStore((s) => s.refreshTick)
   const [reqState, setReqState] = useState({ key: null, data: null, done: false })
+  const [previewState, setPreviewState] = useState({ key: null, data: null, done: false, error: '' })
   const [copied, setCopied] = useState(false)
   const panelRef = useRef(null)
   const lastFocus = useRef(null)
@@ -41,6 +47,9 @@ export default function ScoreboardModal() {
   const reqKey = selected?.rawId
     ? `${selected.sport}:${selected.rawId}:${selected.seriesId || selected.leagueSlug || ''}`
     : null
+  const previewKey = selected?.status === 'scheduled' && reqKey
+    ? `${reqKey}:${selected.time || selected.dateISO || ''}`
+    : null
 
   // Fetch rich Match Centre detail for BOTH Football & Cricket from ESPN APIs
   useEffect(() => {
@@ -61,11 +70,34 @@ export default function ScoreboardModal() {
     return () => {
       alive = false
     }
-  }, [reqKey, selected?.sport, selected?.rawId, selected?.seriesId, selected?.leagueSlug])
+  }, [reqKey, selected?.sport, selected?.rawId, selected?.seriesId, selected?.leagueSlug, refreshTick])
+
+  useEffect(() => {
+    if (!previewKey || !selected) {
+      setPreviewState({ key: null, data: null, done: false, error: '' })
+      return undefined
+    }
+    let alive = true
+    setPreviewState({ key: previewKey, data: null, done: false, error: '' })
+    fetchMatchPreview(selected)
+      .then((data) => {
+        if (alive) setPreviewState({ key: previewKey, data, done: true, error: '' })
+      })
+      .catch((error) => {
+        if (alive) setPreviewState({ key: previewKey, data: null, done: true, error: error?.message || 'Match context unavailable right now.' })
+      })
+    return () => {
+      alive = false
+    }
+  }, [previewKey, selected])
 
   const matched = Boolean(reqKey) && reqState.key === reqKey
   const detail = matched ? reqState.data : null
   const loading = Boolean(reqKey) && (!matched || !reqState.done)
+  const previewMatched = Boolean(previewKey) && previewState.key === previewKey
+  const preview = previewMatched ? previewState.data : null
+  const previewLoading = Boolean(previewKey) && (!previewMatched || !previewState.done)
+  const previewError = previewMatched ? previewState.error : ''
 
   // Restore from ?match= deep-link
   useEffect(() => {
@@ -138,14 +170,26 @@ export default function ScoreboardModal() {
                 MATCH CENTRE
               </span>
 
-              <button
-                type="button"
-                onClick={handleShare}
-                aria-label="Share match"
-                className="-mr-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
-              >
-                <img src={shareIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => refreshMatch(selected)}
+                  disabled={isRefreshing}
+                  title="Refresh live score"
+                  aria-label="Refresh live score"
+                  className="grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage disabled:opacity-60"
+                >
+                  <RefreshCw size={17} className={isRefreshing ? 'animate-spin text-brand-strong' : 'text-ink'} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label="Share match"
+                  className="-mr-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
+                >
+                  <img src={shareIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -162,9 +206,23 @@ export default function ScoreboardModal() {
             )}
 
             {selected.sport === 'football' ? (
-              <FootballBoard match={selected} detail={detail} loading={loading} />
+              <FootballBoard
+                match={selected}
+                detail={detail}
+                loading={loading}
+                preview={preview}
+                previewLoading={previewLoading}
+                previewError={previewError}
+              />
             ) : (
-              <CricketBoard match={selected} detail={detail} loading={loading} />
+              <CricketBoard
+                match={selected}
+                detail={detail}
+                loading={loading}
+                preview={preview}
+                previewLoading={previewLoading}
+                previewError={previewError}
+              />
             )}
           </motion.div>
         </motion.div>

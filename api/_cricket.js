@@ -93,17 +93,44 @@ function parseScoreString(rawScore) {
   return { score: compact || full, overs, fullScore: full };
 }
 
+const IST_TZ = 'Asia/Kolkata';
+
+function formatIstDateISO(d) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
+function readScoreText(raw) {
+  if (raw == null) return '';
+  if (typeof raw === 'object') {
+    const val = raw.displayValue ?? raw.value ?? raw.score ?? '';
+    return val === '' || val == null ? '' : String(val).trim();
+  }
+  return String(raw).trim();
+}
+
 function formatCricketDateAndTime(isoDate) {
   if (!isoDate) return { dateISO: '', dateLabel: '', kickoffLabel: '' };
   try {
     const d = new Date(isoDate);
     if (!Number.isFinite(d.getTime())) return { dateISO: '', dateLabel: '', kickoffLabel: '' };
-    const dateISO = d.toISOString().slice(0, 10);
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const wk = d.toLocaleDateString('en-GB', { weekday: 'short' });
-    const day = String(d.getDate()).padStart(2, '0');
-    const mon = d.toLocaleDateString('en-GB', { month: 'short' });
+    const dateISO = formatIstDateISO(d);
+    const todayIso = formatIstDateISO(new Date());
+    const timeStr = `${d
+      .toLocaleTimeString('en-IN', {
+        timeZone: IST_TZ,
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+      .replace(/\b(am|pm)\b/i, (m) => m.toUpperCase())} IST`;
+    const wk = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, weekday: 'short' });
+    const day = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, day: '2-digit' });
+    const mon = d.toLocaleDateString('en-GB', { timeZone: IST_TZ, month: 'short' });
     const dateLabel = dateISO === todayIso ? 'Today' : `${wk} ${day} ${mon}`;
     return {
       dateISO,
@@ -169,6 +196,7 @@ function normalizeHeaderEvent(ev, league) {
     const parsed = parseScoreString(c.score);
     const emptyLabel = status === 'scheduled' ? 'TBD' : 'Yet to bat';
     return {
+      id: String(c.id || c.team?.id || ''),
       name,
       short,
       score: parsed.score || emptyLabel,
@@ -179,6 +207,10 @@ function normalizeHeaderEvent(ev, league) {
   };
 
   const { dateISO, dateLabel, kickoffLabel } = formatCricketDateAndTime(ev.date);
+  const displayNeed =
+    status === 'scheduled' && kickoffLabel && (!need || /starts at|\b(gmt|utc|est|edt|pst|local)\b/i.test(need))
+      ? `Starts ${kickoffLabel}`
+      : need;
 
   return {
     id: seriesId ? `cr-${seriesId}-${rawId}` : `cr-${rawId}`,
@@ -196,7 +228,7 @@ function normalizeHeaderEvent(ev, league) {
     hasScores: hasAnyScore,
     teamA: mapTeam(c1, 'Team A'),
     teamB: mapTeam(c2, 'Team B'),
-    meta: { need, crr: '', lastWicket: '' },
+    meta: { need: displayNeed, crr: '', lastWicket: '' },
     recentBalls: [],
     batters: [],
     bowlers: [],
@@ -493,6 +525,62 @@ export async function fetchEspnMatchDetail(rawIdInput, rawSeriesInput) {
 
   const cleanInnings = innings.map(({ _lastFow: _f, ...inn }) => inn);
 
+  // Extract Playing XI lineups for both teams from summary.rosters
+  const buildCricketSide = (compEntry, rosterFallback, fallbackColor) => {
+    const tid = String(compEntry?.id || compEntry?.team?.id || rosterFallback?.team?.id || '');
+    const rosterObj =
+      rosters.find((r) => tid && String(r?.team?.id || '') === tid) || rosterFallback || null;
+    const rawList = Array.isArray(rosterObj?.roster) ? rosterObj.roster : [];
+    const mapPlayer = (p) => {
+      const ath = p?.athlete || {};
+      const posAbbr = String(ath?.position?.abbreviation || p?.position?.abbreviation || '').toUpperCase();
+      const posName = String(ath?.position?.name || p?.position?.name || '');
+      const isKeeper = Boolean(p?.keeper || posAbbr === 'WK' || /wicket\s*keeper/i.test(posName));
+      const isCaptain = Boolean(p?.captain);
+      const styles = Array.isArray(ath.style)
+        ? ath.style.map((s) => s?.shortDescription || '').filter(Boolean)
+        : [];
+      const role =
+        posAbbr && posAbbr !== 'UKN'
+          ? posAbbr
+          : styles.slice(0, 2).join(' · ');
+      return {
+        id: String(ath.id || ''),
+        name: ath.displayName || ath.fullName || ath.name || 'Player',
+        shortName: ath.shortName || ath.lastName || ath.displayName || 'Player',
+        role,
+        isCaptain,
+        isKeeper,
+        starter: p?.starter !== false && !p?.sub && !p?.didNotPlay,
+      };
+    };
+    const mapped = rawList.map(mapPlayer);
+    const starters = mapped.filter((p) => p.starter);
+    const subs = mapped.filter((p) => !p.starter);
+    const players = starters.length ? starters : mapped;
+    const rawColor = compEntry?.team?.color || rosterObj?.team?.color || '';
+    return {
+      teamName:
+        compEntry?.team?.displayName ||
+        compEntry?.team?.name ||
+        rosterObj?.team?.displayName ||
+        rosterObj?.team?.name ||
+        'Team',
+      teamShort:
+        compEntry?.team?.abbreviation ||
+        rosterObj?.team?.abbreviation ||
+        shortOf(compEntry?.team?.displayName || rosterObj?.team?.displayName),
+      color: rawColor ? `#${String(rawColor).replace(/^#/, '')}` : fallbackColor,
+      players,
+      subs: starters.length ? subs : [],
+    };
+  };
+
+  const lineups = {
+    home: buildCricketSide(competitors[0], rosters[0], '#0D9488'),
+    away: buildCricketSide(competitors[1], rosters[1], '#3B82F6'),
+  };
+
   return {
     provider: 'espn',
     matchHeader,
@@ -504,6 +592,214 @@ export async function fetchEspnMatchDetail(rawIdInput, rawSeriesInput) {
     recentBalls,
     batters: activeBatters,
     innings: cleanInnings,
+    lineups,
     commentary,
   };
+}
+
+function formatDateRange(targetDate) {
+  const target = new Date(targetDate);
+  if (!Number.isFinite(target.getTime())) return '';
+  const end = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate()) - 86400000);
+  const start = new Date(end.getTime() - 365 * 86400000);
+  const format = (date) => `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}${String(date.getUTCDate()).padStart(2, '0')}`;
+  return `${format(start)}-${format(end)}`;
+}
+
+function extractCricketEvents(payload, depth = 0) {
+  if (!payload || typeof payload !== 'object' || depth > 5) return [];
+  if (Array.isArray(payload.events)) return payload.events;
+  if (Array.isArray(payload.matches)) return payload.matches;
+  if (Array.isArray(payload.competitions)) {
+    const events = payload.competitions.flatMap((competition) => Array.isArray(competition?.events) ? competition.events : []);
+    if (events.length) return events;
+  }
+  const children = Array.isArray(payload.sports) ? payload.sports : Array.isArray(payload.children) ? payload.children : [];
+  for (const child of children) {
+    const found = extractCricketEvents(child, depth + 1);
+    if (found.length) return found;
+  }
+  const leagues = Array.isArray(payload.leagues) ? payload.leagues : [];
+  if (leagues.length) return leagues.flatMap((league) => Array.isArray(league?.events) ? league.events : []);
+  return [];
+}
+
+function cricketCompetitors(event) {
+  const competition = event?.competitions?.[0] || event?.competition || {};
+  const competitors = Array.isArray(event?.competitors)
+    ? event.competitors
+    : Array.isArray(competition?.competitors)
+      ? competition.competitors
+      : [];
+  return { competition, competitors };
+}
+
+function cricketEventFormat(event, competition) {
+  return normalizeFormat(event?.eventType || event?.class?.eventType || event?.class?.generalClassCard || competition?.class?.eventType || '');
+}
+
+function cricketEventForm(event, teamId, teamName, targetDate, targetFormat) {
+  const { competition, competitors } = cricketCompetitors(event);
+  const own = competitors.find((entry) =>
+    (teamId && String(entry?.id || entry?.team?.id || '') === String(teamId)) ||
+    String(entry?.team?.displayName || entry?.displayName || entry?.team?.name || entry?.name || '').toLowerCase() === String(teamName || '').toLowerCase(),
+  );
+  const opponent = competitors.find((entry) => entry !== own);
+  const date = event?.date || competition?.date || '';
+  const targetMs = Date.parse(targetDate);
+  const eventMs = Date.parse(date);
+  const state = String(event?.status?.type?.state || competition?.status?.type?.state || '').toLowerCase();
+  const format = cricketEventFormat(event, competition);
+  if (!own || !opponent || state !== 'post' || !Number.isFinite(eventMs) || eventMs >= targetMs) return null;
+  if (targetFormat && normalizeFormat(targetFormat) !== format) return null;
+
+  const ownName = own?.team?.displayName || own?.team?.name || own?.displayName || own?.name || 'Team';
+  const opponentName = opponent?.team?.displayName || opponent?.team?.name || opponent?.displayName || opponent?.name || 'Opponent';
+  const winner = competitors.find((entry) => entry?.winner === true);
+  const statusText = String(competition?.status?.type?.detail || competition?.status?.summary || event?.status?.summary || '').toLowerCase();
+  const result = winner
+    ? winner === own ? 'W' : 'L'
+    : /no result|abandoned|cancelled|canceled/.test(statusText)
+      ? 'N/R'
+      : 'D';
+  const historicalHome = competitors.find((entry) => entry?.homeAway === 'home') || competitors[0];
+  const historicalAway = competitors.find((entry) => entry?.homeAway === 'away') || competitors.find((entry) => entry !== historicalHome);
+
+  const ownScoreText = readScoreText(own?.score);
+  const opponentScoreText = readScoreText(opponent?.score);
+  const histHomeScore = readScoreText(historicalHome?.score);
+  const histAwayScore = readScoreText(historicalAway?.score);
+
+  return {
+    id: String(event?.id || ''),
+    date: new Date(eventMs).toISOString(),
+    opponentId: String(opponent?.id || opponent?.team?.id || ''),
+    opponent: opponentName,
+    score: `${ownScoreText || '–'}–${opponentScoreText || '–'}`,
+    result,
+    homeName: historicalHome?.team?.displayName || historicalHome?.displayName || historicalHome?.name || '',
+    awayName: historicalAway?.team?.displayName || historicalAway?.displayName || historicalAway?.name || '',
+    homeScore: histHomeScore,
+    awayScore: histAwayScore,
+    teamName: ownName,
+    format,
+  };
+}
+
+function cricketStandingsEntries(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 7) return [];
+  if (!Array.isArray(value)) {
+    if (Array.isArray(value.entries) && value.entries.length) return value.entries;
+    if (value.standings && Array.isArray(value.standings.entries)) return value.standings.entries;
+    for (const child of Object.values(value)) {
+      const found = cricketStandingsEntries(child, depth + 1);
+      if (found.length) return found;
+    }
+  }
+  return [];
+}
+
+function normalizeCricketStanding(entry) {
+  const stats = Array.isArray(entry?.stats) ? entry.stats : [];
+  const stat = (names) => {
+    const found = stats.find((item) => names.includes(String(item?.name || '').toLowerCase()));
+    return found?.displayValue ?? found?.value ?? '';
+  };
+  const rank = stat(['rank', 'position', 'playoffseed']);
+  const points = stat(['points', 'overallpoints']);
+  const played = stat(['matches', 'played', 'gamesplayed']);
+  const wins = stat(['wins', 'overallwins']);
+  const losses = stat(['losses', 'overalllosses']);
+  if (!rank && !points && !played) return null;
+  return {
+    rank: rank ? String(rank) : '',
+    points: points ? String(points) : '',
+    played: played ? String(played) : '',
+    record: wins !== '' && losses !== '' ? `${wins}-${losses}` : '',
+  };
+}
+
+export async function fetchEspnCricketPreview({
+  seriesId,
+  homeId,
+  awayId,
+  homeName = 'Team A',
+  awayName = 'Team B',
+  date = '',
+  format = '',
+}) {
+  const series = String(seriesId || '').trim();
+  const homeTeamId = String(homeId || '').trim();
+  const awayTeamId = String(awayId || '').trim();
+  const dates = formatDateRange(date);
+  if (!/^[a-z0-9._-]+$/i.test(series) || !dates) {
+    return { form: { home: [], away: [] }, headToHead: [], standings: null };
+  }
+
+  const root = `https://site.api.espn.com/apis/site/v2/sports/cricket/${encodeURIComponent(series)}`;
+  const [historyResult, standingsResult] = await Promise.allSettled([
+    fetchJson(`${root}/scoreboard?dates=${encodeURIComponent(dates)}`, { timeoutMs: 10000, retries: 0 }),
+    fetchJson(`${root}/standings`, { timeoutMs: 9000, retries: 0 }),
+  ]);
+
+  let history = historyResult.status === 'fulfilled'
+    ? extractCricketEvents(historyResult.value)
+    : [];
+  if (history.length < 10) {
+    try {
+      const globalHistory = await fetchJson(`${ESPN_HEADER_URL}&dates=${encodeURIComponent(dates)}`, {
+        timeoutMs: 7000,
+        retries: 0,
+      });
+      const combined = new Map(history.map((event) => [String(event?.id || ''), event]));
+      for (const event of extractCricketEvents(globalHistory)) {
+        const id = String(event?.id || '');
+        if (id) combined.set(id, event);
+      }
+      history = [...combined.values()];
+    } catch { /* partial preview is still useful without history */ }
+  }
+  const pastMatches = history
+    .map((event) => cricketEventForm(event, homeTeamId, homeName, date, format))
+    .filter(Boolean);
+  const homeForm = pastMatches
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, opponent, score, result }) => ({ date: resultDate, opponent, score, result }));
+
+  const awayMatches = history
+    .map((event) => cricketEventForm(event, awayTeamId, awayName, date, format))
+    .filter(Boolean);
+  const awayForm = awayMatches
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, opponent, score, result }) => ({ date: resultDate, opponent, score, result }));
+
+  const headToHead = pastMatches
+    .filter((event) => event.opponentId === awayTeamId || event.opponent.toLowerCase() === awayName.toLowerCase())
+    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+    .slice(0, 5)
+    .map(({ date: resultDate, homeName: eventHome, awayName: eventAway, homeScore, awayScore }) => ({
+      date: resultDate,
+      home: eventHome || homeName,
+      away: eventAway || awayName,
+      score: `${homeScore || '–'}–${awayScore || '–'}`,
+    }));
+
+  let standings = null;
+  if (standingsResult.status === 'fulfilled') {
+    const entries = cricketStandingsEntries(standingsResult.value);
+    const findEntry = (teamId, name) => entries.find((entry) =>
+      (teamId && String(entry?.team?.id || entry?.id || '') === teamId) ||
+      String(entry?.team?.displayName || entry?.team?.name || '').toLowerCase() === name.toLowerCase(),
+    );
+    standings = {
+      competition: standingsResult.value?.name || standingsResult.value?.header?.name || '',
+      home: normalizeCricketStanding(findEntry(homeTeamId, homeName)),
+      away: normalizeCricketStanding(findEntry(awayTeamId, awayName)),
+    };
+    if (!standings.home && !standings.away) standings = null;
+  }
+
+  return { form: { home: homeForm, away: awayForm }, headToHead, standings };
 }

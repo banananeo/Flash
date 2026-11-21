@@ -11,10 +11,11 @@ export default async function handler(req, res) {
   const safeDate = /^\d{8}$/.test(date) ? date : '';
   const upcomingParam = url.searchParams.get('upcoming');
   const upcoming = upcomingParam == null ? !safeDate : upcomingParam === '1' || upcomingParam === 'true';
+  const noCache = url.searchParams.has('t');
 
   try {
     const matches = await fetchEspnLiveMatches(safeDate, { upcoming });
-    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', noCache ? 'no-store' : 's-maxage=30, stale-while-revalidate=30');
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json({ provider: 'espn', date: safeDate || 'today', matches });
   } catch (e) {

@@ -46,6 +46,10 @@ export default function F1Section() {
         )}
       </div>
 
+      <div className="mt-5">
+        <F1Countdown nextRace={nextRace} schedule={schedule} season={season} />
+      </div>
+
       {/* Segmented Control: Standings | Calendar | Results | Telemetry */}
       <div className="mt-5 grid grid-cols-4 rounded-full bg-sage p-1">
         {[
@@ -88,10 +92,7 @@ export default function F1Section() {
         ) : (
           <>
             {tab === 'standings' && (
-              <div className="space-y-7">
-                <F1Countdown nextRace={nextRace} season={season} />
-                <F1Standings drivers={driverStandings} teams={teamStandings} />
-              </div>
+              <F1Standings drivers={driverStandings} teams={teamStandings} />
             )}
             {tab === 'calendar' && (
               <F1Calendar

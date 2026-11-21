@@ -1,8 +1,11 @@
+import { RefreshCw } from 'lucide-react'
 import { useScoreStore, todayISO } from '../../store/useScoreStore'
 
 // Clean white rounded editorial match row ("Around the grounds" & "Your Leagues & Teams").
 export default function MatchCard({ match, isFav = false, onToggleFav, showLeagueBadge = false }) {
   const openMatch = useScoreStore((s) => s.openMatch)
+  const refreshMatch = useScoreStore((s) => s.refreshMatch)
+  const isRefreshing = useScoreStore((s) => Boolean(s.refreshingMatches?.[match?.id]))
   if (!match?.teamA || !match?.teamB) return null
 
   const isLive = match.status === 'live'
@@ -103,22 +106,38 @@ export default function MatchCard({ match, isFav = false, onToggleFav, showLeagu
           </span>
         )}
 
-        {onToggleFav && (
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              onToggleFav()
+              refreshMatch(match)
             }}
-            aria-label={isFav ? 'Unfollow team' : 'Follow team'}
-            aria-pressed={isFav}
-            className={`text-[14px] leading-none transition-colors ${
-              isFav ? 'text-ink' : 'text-hairline hover:text-muted'
-            }`}
+            disabled={isRefreshing}
+            title="Refresh match score"
+            aria-label="Refresh match score"
+            className="grid h-6 w-6 place-items-center rounded-full bg-sage text-muted transition-colors hover:bg-hairline hover:text-ink disabled:opacity-60"
           >
-            ★
+            <RefreshCw size={11} className={isRefreshing ? 'animate-spin text-brand-strong' : ''} />
           </button>
-        )}
+
+          {onToggleFav && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFav()
+              }}
+              aria-label={isFav ? 'Unfollow team' : 'Follow team'}
+              aria-pressed={isFav}
+              className={`text-[14px] leading-none transition-colors ${
+                isFav ? 'text-ink' : 'text-hairline hover:text-muted'
+              }`}
+            >
+              ★
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

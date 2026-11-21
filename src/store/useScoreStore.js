@@ -217,6 +217,8 @@ export const useScoreStore = create((set, get) => ({
   error: null,
   selected: null,
   source: { football: 'mock', cricket: 'mock' },
+  refreshingMatches: {},
+  refreshTick: 0,
 
   favTeams: loadJSON('flash-favs-v1', []),
   favLeagues: loadJSON('flash-fav-leagues-v1', []),
@@ -336,6 +338,61 @@ export const useScoreStore = create((set, get) => ({
     } catch (e) {
       if (mySeq !== scoreSeq) return
       set(hadLive ? { error: e.message } : { status: 'error', error: e.message })
+    }
+  },
+
+  refreshMatch: async (match) => {
+    const matchId = match?.id
+    if (!matchId) return
+    const matchSport = match?.sport === 'cricket' ? 'cricket' : 'football'
+    const dt = get().selectedDate
+    const dateParam = dt === todayISO() ? '' : dt
+
+    set((st) => ({
+      refreshingMatches: { ...st.refreshingMatches, [matchId]: true },
+      error: null,
+    }))
+
+    try {
+      if (matchSport === 'football') {
+        const { matches } = await fetchFootballLive(dateParam, { force: true })
+        set((st) => {
+          const updatedSelected =
+            st.selected?.id === matchId
+              ? matches.find((m) => m.id === matchId) || st.selected
+              : st.selected
+          return {
+            football: matches.length ? matches : st.football,
+            selected: updatedSelected,
+            status: 'live',
+            source: { ...st.source, football: 'live' },
+            refreshTick: st.refreshTick + 1,
+          }
+        })
+      } else {
+        const { matches } = await fetchCricketLive(dateParam, { force: true })
+        set((st) => {
+          const updatedSelected =
+            st.selected?.id === matchId
+              ? matches.find((m) => m.id === matchId) || st.selected
+              : st.selected
+          return {
+            cricket: matches.length ? matches : st.cricket,
+            selected: updatedSelected,
+            status: 'live',
+            source: { ...st.source, cricket: 'live' },
+            refreshTick: st.refreshTick + 1,
+          }
+        })
+      }
+    } catch (e) {
+      set({ error: e.message })
+    } finally {
+      set((st) => {
+        const nextMap = { ...st.refreshingMatches }
+        delete nextMap[matchId]
+        return { refreshingMatches: nextMap }
+      })
     }
   },
 

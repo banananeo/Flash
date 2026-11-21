@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
+import { RefreshCw } from 'lucide-react'
 import MatchCard from './MatchCard'
 import ScorePreferencesBar from './ScorePreferencesBar'
 import { fetchCricketDetail } from '../../lib/cricket'
@@ -29,7 +30,7 @@ function formatPillDate(isoStr) {
   return `${wk} ${dd}`
 }
 
-function FootballHeroCard({ match, onOpen, isFav, onToggleFav }) {
+function FootballHeroCard({ match, onOpen, isFav, onToggleFav, onRefresh, isRefreshing }) {
   if (!match) return null
   const isLive = match.status === 'live'
   const isScheduled = match.status === 'scheduled'
@@ -75,6 +76,19 @@ function FootballHeroCard({ match, onOpen, isFav, onToggleFav }) {
               {badgeLabel}
             </span>
           )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRefresh?.(match)
+            }}
+            disabled={isRefreshing}
+            title="Refresh match score"
+            aria-label="Refresh match score"
+            className="grid h-7 w-7 place-items-center rounded-full bg-sage text-muted transition-colors hover:bg-hairline hover:text-ink disabled:opacity-60"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'animate-spin text-brand-strong' : ''} />
+          </button>
           {onToggleFav && (
             <button
               type="button"
@@ -124,7 +138,7 @@ function FootballHeroCard({ match, onOpen, isFav, onToggleFav }) {
   )
 }
 
-function CricketHeroCard({ match, onOpen, isFav, onToggleFav }) {
+function CricketHeroCard({ match, onOpen, isFav, onToggleFav, onRefresh, isRefreshing }) {
   if (!match) return null
   const isLive = match.status === 'live'
   const isScheduled = match.status === 'scheduled'
@@ -163,6 +177,19 @@ function CricketHeroCard({ match, onOpen, isFav, onToggleFav }) {
               FT
             </span>
           )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onRefresh?.(match)
+            }}
+            disabled={isRefreshing}
+            title="Refresh match score"
+            aria-label="Refresh match score"
+            className="grid h-7 w-7 place-items-center rounded-full bg-sage text-muted transition-colors hover:bg-hairline hover:text-ink disabled:opacity-60"
+          >
+            <RefreshCw size={12} className={isRefreshing ? 'animate-spin text-brand-strong' : ''} />
+          </button>
           {onToggleFav && (
             <button
               type="button"
@@ -284,6 +311,9 @@ export default function LiveScoresSection() {
   const favTeams = useScoreStore((s) => s.favTeams)
   const favLeagues = useScoreStore((s) => s.favLeagues)
   const toggleFav = useScoreStore((s) => s.toggleFav)
+  const refreshMatch = useScoreStore((s) => s.refreshMatch)
+  const refreshingMatches = useScoreStore((s) => s.refreshingMatches)
+  const refreshTick = useScoreStore((s) => s.refreshTick)
 
   const [featuredCricketDetail, setFeaturedCricketDetail] = useState(null)
 
@@ -362,7 +392,7 @@ export default function LiveScoresSection() {
     return () => {
       alive = false
     }
-  }, [featured?.sport, featured?.rawId, featured?.seriesId])
+  }, [featured?.sport, featured?.rawId, featured?.seriesId, refreshTick])
 
   const prevDate = shiftISO(selectedDate, -1)
   const nextDate = shiftISO(selectedDate, 1)
@@ -563,6 +593,8 @@ export default function LiveScoresSection() {
                   onOpen={openMatch}
                   isFav={isFavMatch(featured, favTeams)}
                   onToggleFav={() => toggleMatchFav(featured)}
+                  onRefresh={refreshMatch}
+                  isRefreshing={Boolean(refreshingMatches?.[featured.id])}
                 />
                 <AtTheCreaseCard match={featured} detail={featuredCricketDetail} />
               </>
@@ -572,6 +604,8 @@ export default function LiveScoresSection() {
                 onOpen={openMatch}
                 isFav={isFavMatch(featured, favTeams)}
                 onToggleFav={() => toggleMatchFav(featured)}
+                onRefresh={refreshMatch}
+                isRefreshing={Boolean(refreshingMatches?.[featured?.id])}
               />
             )}
 

@@ -17,25 +17,30 @@ function friendlyCricketError(e) {
   return e;
 }
 
-export async function fetchCricketLive(dateStr = '') {
+export async function fetchCricketLive(dateStr = '', { force = false } = {}) {
   const cleanDate = String(dateStr || '').replace(/-/g, '');
-  const cacheKey = `live-cache-cricket-v2-${cleanDate || 'today'}`;
-  try {
-    const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-    if (
-      cached &&
-      cached.provider === 'espn' &&
-      Date.now() - cached.ts < 60 * 1000 &&
-      cached.matches?.length
-    ) {
-      return { matches: cached.matches, cached: true };
-    }
-  } catch { /* ignore */ }
+  const cacheKey = `live-cache-cricket-v3-${cleanDate || 'today'}`;
+  if (!force) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (
+        cached &&
+        cached.provider === 'espn' &&
+        Date.now() - cached.ts < 60 * 1000 &&
+        cached.matches?.length
+      ) {
+        return { matches: cached.matches, cached: true };
+      }
+    } catch { /* ignore */ }
+  }
 
-  const qs = cleanDate ? `?date=${encodeURIComponent(cleanDate)}` : '';
+  const params = new URLSearchParams();
+  if (cleanDate) params.set('date', cleanDate);
+  if (force) params.set('t', String(Date.now()));
+  const qs = params.toString() ? `?${params}` : '';
   let res;
   try {
-    res = await fetch(`/api/cricket/live${qs}`);
+    res = await fetch(`/api/cricket/live${qs}`, force ? { cache: 'no-store' } : undefined);
     if (res.status === 404) throw new Error('Cricket API route not found');
   } catch (e) {
     throw friendlyCricketError(e);
@@ -81,6 +86,7 @@ export function normalizeDetail(data) {
     recentBalls: Array.isArray(d.recentBalls) ? d.recentBalls : [],
     batters: Array.isArray(d.batters) ? d.batters : [],
     innings: Array.isArray(d.innings) ? d.innings : [],
+    lineups: d.lineups || { home: null, away: null },
     commentary: Array.isArray(d.commentary) ? d.commentary : [],
     score: Array.isArray(d.score) ? d.score : [],
   };
