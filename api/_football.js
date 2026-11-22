@@ -403,8 +403,8 @@ function statLookup(teamStats) {
 }
 
 function buildStatRow(label, hRaw, aRaw, suffix = '') {
-  const hNum = parseFloat(String(hRaw || '').replace('%', ''));
-  const aNum = parseFloat(String(aRaw || '').replace('%', ''));
+  const hNum = parseFloat(String(hRaw || '').replace(/%/g, ''));
+  const aNum = parseFloat(String(aRaw || '').replace(/%/g, ''));
   if (!Number.isFinite(hNum) && !Number.isFinite(aNum)) return null;
   const hv = Number.isFinite(hNum) ? hNum : 0;
   const av = Number.isFinite(aNum) ? aNum : 0;

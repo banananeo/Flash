@@ -93,7 +93,11 @@ export default function App() {
         {/* Editorial Story Reader, Match Centre, PWA Install & Morning Brief */}
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <ArticleModal article={readingArticle} onClose={closeReader} />
+            <ArticleModal
+              key={readingArticle?.id || readingArticle?.url || 'closed'}
+              article={readingArticle}
+              onClose={closeReader}
+            />
             <ScoreboardModal />
             <MorningReminder />
           </Suspense>

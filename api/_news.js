@@ -116,13 +116,35 @@ function unwrap(raw) {
   return (cdata ? cdata[1] : decodeEntities(raw)).trim();
 }
 
+const TAG_PATTERNS = {
+  title: /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i,
+  link: /<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i,
+  guid: /<guid(?:\s[^>]*)?>([\s\S]*?)<\/guid>/i,
+  description: /<description(?:\s[^>]*)?>([\s\S]*?)<\/description>/i,
+  pubDate: /<pubDate(?:\s[^>]*)?>([\s\S]*?)<\/pubDate>/i,
+  'News:Image': /<News:Image(?:\s[^>]*)?>([\s\S]*?)<\/News:Image>/i,
+  'News:Source': /<News:Source(?:\s[^>]*)?>([\s\S]*?)<\/News:Source>/i,
+  source: /<source(?:\s[^>]*)?>([\s\S]*?)<\/source>/i,
+};
+
+const ATTR_PATTERNS = {
+  'media:content:url': /<media:content\s[^>]*\burl="([^"]*)"/i,
+  'media:thumbnail:url': /<media:thumbnail\s[^>]*\burl="([^"]*)"/i,
+  'enclosure:url': /<enclosure\s[^>]*\burl="([^"]*)"/i,
+  'source:url': /<source\s[^>]*\burl="([^"]*)"/i,
+};
+
 function tag(xml, name) {
-  const m = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, 'i'));
+  const re = TAG_PATTERNS[name];
+  if (!re) return '';
+  const m = xml.match(re);
   return m ? unwrap(m[1]) : '';
 }
 
 function attr(xml, name, attribute) {
-  const m = xml.match(new RegExp(`<${name}\\s[^>]*\\b${attribute}="([^"]*)"`, 'i'));
+  const re = ATTR_PATTERNS[`${name}:${attribute}`];
+  if (!re) return '';
+  const m = xml.match(re);
   return m ? decodeEntities(m[1]) : '';
 }
 
@@ -198,7 +220,7 @@ function normalizeRssFeedItems(xml, sourceName, sourceHome) {
       if (!url) return null;
       let image = cleanImageUrl(it.thumbnail);
       if (image && image.includes('ichef.bbci.co.uk')) {
-        image = image.replace('/standard/240/', '/standard/800/');
+        image = image.replace(/\/standard\/240\//g, '/standard/800/');
       }
       return {
         id: (it.guid || url).replace(/#\d+$/, ''),

@@ -190,38 +190,96 @@ function isPrivateIpv4(ip) {
   return false;
 }
 
+function expandIpv6ToWords(rawIp) {
+  let ip = String(rawIp || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!ip || ip.includes('%')) return null; // Reject zone indices (%eth0)
+
+  // Convert trailing dotted-quad IPv4 (e.g. ::ffff:127.0.0.1 or 64:ff9b::10.0.0.1) into 2 hex words
+  const lastColon = ip.lastIndexOf(':');
+  if (lastColon !== -1 && ip.slice(lastColon + 1).includes('.')) {
+    const v4Part = ip.slice(lastColon + 1);
+    const nums = v4Part.split('.').map((n) => Number(n));
+    if (nums.length !== 4 || nums.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
+      return null;
+    }
+    const wHi = ((nums[0] << 8) | nums[1]).toString(16);
+    const wLo = ((nums[2] << 8) | nums[3]).toString(16);
+    ip = `${ip.slice(0, lastColon + 1)}${wHi}:${wLo}`;
+  }
+
+  const dblParts = ip.split('::');
+  if (dblParts.length > 2) return null;
+
+  const parseSide = (side) => {
+    if (!side) return [];
+    const tokens = side.split(':');
+    const out = [];
+    for (const tok of tokens) {
+      if (!/^[0-9a-f]{1,4}$/.test(tok)) return null;
+      out.push(parseInt(tok, 16));
+    }
+    return out;
+  };
+
+  if (dblParts.length === 1) {
+    const words = parseSide(dblParts[0]);
+    return words && words.length === 8 ? words : null;
+  }
+
+  const left = parseSide(dblParts[0]);
+  const right = parseSide(dblParts[1]);
+  if (!left || !right || left.length + right.length >= 8) return null;
+  const zeros = new Array(8 - left.length - right.length).fill(0);
+  return [...left, ...zeros, ...right];
+}
+
+function wordsToIpv4(wHi, wLo) {
+  return `${(wHi >> 8) & 255}.${wHi & 255}.${(wLo >> 8) & 255}.${wLo & 255}`;
+}
+
 export function isPrivateIp(rawIp) {
   const ip = String(rawIp || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (ip.includes('%')) return true;
   const version = isIP(ip);
   if (version === 4) return isPrivateIpv4(ip);
   if (version === 6) {
-    if (ip === '::' || ip === '::1') return true;
-    // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1 or ::ffff:7f00:1)
-    if (ip.startsWith('::ffff:')) {
-      const rest = ip.slice(7);
-      if (isIP(rest) === 4) return isPrivateIpv4(rest);
-      const hexParts = rest.split(':');
-      if (hexParts.length === 2) {
-        const hi = parseInt(hexParts[0], 16);
-        const lo = parseInt(hexParts[1], 16);
-        if (Number.isFinite(hi) && Number.isFinite(lo)) {
-          return isPrivateIpv4(`${(hi >> 8) & 255}.${hi & 255}.${(lo >> 8) & 255}.${lo & 255}`);
-        }
-      }
+    const w = expandIpv6ToWords(ip);
+    if (!w) return true;
+    const isFirst5Zero = w[0] === 0 && w[1] === 0 && w[2] === 0 && w[3] === 0 && w[4] === 0;
+    // Unspecified (::) or Loopback (::1) or IPv4-compatible (::x.y.z.w)
+    if (isFirst5Zero && w[5] === 0) {
+      if (w[6] === 0 && (w[7] === 0 || w[7] === 1)) return true;
+      return isPrivateIpv4(wordsToIpv4(w[6], w[7]));
+    }
+    // IPv4-mapped IPv6 (::ffff:0:0/96) or SIIT IPv4-translated (::ffff:0:0:0/96)
+    if (isFirst5Zero && w[5] === 0xffff) {
+      return isPrivateIpv4(wordsToIpv4(w[6], w[7]));
+    }
+    if (w[0] === 0 && w[1] === 0 && w[2] === 0 && w[3] === 0 && w[4] === 0xffff && w[5] === 0) {
+      return isPrivateIpv4(wordsToIpv4(w[6], w[7]));
+    }
+    // NAT64 well-known prefix (64:ff9b::/96 or 64:ff9b:1::/48)
+    if (w[0] === 0x0064 && w[1] === 0xff9b) {
+      return isPrivateIpv4(wordsToIpv4(w[6], w[7]));
+    }
+    // 6to4 (2002::/16) embeds IPv4 in w[1], w[2]
+    if (w[0] === 0x2002) {
+      return isPrivateIpv4(wordsToIpv4(w[1], w[2]));
+    }
+    // Teredo (2001:0000::/32), Documentation (2001:0db8::/32), Benchmarking (2001:0002::/48)
+    if (w[0] === 0x2001 && (w[1] === 0x0000 || w[1] === 0x0db8 || w[1] === 0x0002)) {
       return true;
     }
-    // Unique local (fc00::/7), link-local (fe80::/10), multicast (ff00::/8), deprecated site-local (fec0::/10)
-    const firstHextet = parseInt(ip.split(':')[0] || '0', 16);
-    if (!Number.isFinite(firstHextet)) return true;
-    if ((firstHextet & 0xfe00) === 0xfc00) return true; // fc00::/7
-    if ((firstHextet & 0xffc0) === 0xfe80) return true; // fe80::/10
-    if ((firstHextet & 0xffc0) === 0xfec0) return true; // fec0::/10
-    if ((firstHextet & 0xff00) === 0xff00) return true; // ff00::/8
-    if (ip.startsWith('100::')) return true; // Discard prefix
-    if (ip.startsWith('2001:db8:')) return true; // Documentation
+    // Discard-Only Address Block (0100::/64)
+    if (w[0] === 0x0100 && w[1] === 0 && w[2] === 0 && w[3] === 0) return true;
+    // Unique local (fc00::/7), link-local (fe80::/10), deprecated site-local (fec0::/10), multicast (ff00::/8)
+    if ((w[0] & 0xfe00) === 0xfc00) return true; // fc00::/7
+    if ((w[0] & 0xffc0) === 0xfe80) return true; // fe80::/10
+    if ((w[0] & 0xffc0) === 0xfec0) return true; // fec0::/10
+    if ((w[0] & 0xff00) === 0xff00) return true; // ff00::/8
     return false;
   }
-  return true; // Unknown/malformed IP -> block by default
+  return true;
 }
 
 function isBlockedHostname(rawHost) {

@@ -188,6 +188,7 @@ export default function ScoreboardModal() {
     <AnimatePresence>
       {selected && (
         <motion.div
+          key={selected.id}
           ref={panelRef}
           tabIndex={-1}
           role="dialog"

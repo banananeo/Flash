@@ -353,32 +353,56 @@ export default defineConfig(() => {
             {
               urlPattern: /\/api\/news.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'news', expiration: { maxEntries: 30, maxAgeSeconds: 600 } },
+              options: {
+                cacheName: 'news',
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 30, maxAgeSeconds: 600 },
+              },
             },
             {
               urlPattern: /\/api\/cricket\/.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'espn-cricket', expiration: { maxEntries: 20, maxAgeSeconds: 60 } },
+              options: {
+                cacheName: 'espn-cricket',
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 20, maxAgeSeconds: 60 },
+              },
             },
             {
               urlPattern: /\/api\/football\/.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'espn-football', expiration: { maxEntries: 20, maxAgeSeconds: 60 } },
+              options: {
+                cacheName: 'espn-football',
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 20, maxAgeSeconds: 60 },
+              },
             },
             {
               urlPattern: /\/api\/preview.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'match-preview', expiration: { maxEntries: 20, maxAgeSeconds: 600 } },
+              options: {
+                cacheName: 'match-preview',
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 20, maxAgeSeconds: 600 },
+              },
             },
             {
               urlPattern: /\/api\/f1standings.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'f1-standings', expiration: { maxEntries: 12, maxAgeSeconds: 120 } },
+              options: {
+                cacheName: 'f1-standings',
+                cacheableResponse: { statuses: [200] },
+                expiration: { maxEntries: 12, maxAgeSeconds: 120 },
+              },
             },
             {
               urlPattern: /^https:\/\/picsum\.photos\/.*/i,
               handler: 'CacheFirst',
-              options: { cacheName: 'images', expiration: { maxEntries: 60, maxAgeSeconds: 86400 } },
+              options: {
+                cacheName: 'images',
+                cacheableResponse: { statuses: [0, 200] },
+                expiration: { maxEntries: 60, maxAgeSeconds: 86400 },
+              },
             },
           ],
         },

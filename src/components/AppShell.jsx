@@ -20,12 +20,6 @@ const NAV_ITEMS = [
 export function TopBar() {
   const view = useScoreStore((s) => s.view)
   const setView = useScoreStore((s) => s.setView)
-  const liveCount = useScoreStore((s) => {
-    let n = 0
-    for (const m of s.football || []) if (m?.status === 'live') n++
-    for (const m of s.cricket || []) if (m?.status === 'live') n++
-    return n
-  })
   const searchQuery = useNewsStore((s) => s.searchQuery)
   const searchNews = useNewsStore((s) => s.searchNews)
   const openReminder = useReminderStore((s) => s.openNow)
@@ -72,9 +66,8 @@ export function TopBar() {
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
-                className={`relative flex h-full items-center text-[14px] transition-colors ${
-                  active ? 'font-bold text-ink' : 'font-medium text-muted hover:text-ink'
-                }`}
+                className={`relative flex h-full items-center text-[14px] transition-colors ${active ? 'font-bold text-ink' : 'font-medium text-muted hover:text-ink'
+                  }`}
               >
                 {item.desktopLabel}
                 {active && (
@@ -116,7 +109,7 @@ export function TopBar() {
             className="flex h-[38px] items-center gap-1.5 rounded-full bg-live px-4 text-[11px] font-bold uppercase tracking-wider text-white transition-transform active:scale-95"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-white" />
-            LIVE{liveCount > 0 ? ` · ${liveCount}` : ''}
+            Live
           </button>
 
           <button
@@ -187,7 +180,7 @@ export function TopBar() {
               )}
               <button
                 type="submit"
-                    className="rounded-full bg-pulse px-4 py-2 text-xs font-bold text-ink"
+                className="rounded-full bg-pulse px-4 py-2 text-xs font-bold text-ink"
               >
                 Go
               </button>
@@ -221,9 +214,8 @@ export function BottomNav() {
                 aria-current={active ? 'page' : undefined}
               >
                 <div
-                  className={`flex h-[48px] w-full max-w-[72px] flex-col items-center justify-center gap-1 rounded-[16px] transition-colors ${
-                    active ? 'bg-sage-tint' : 'bg-transparent'
-                  }`}
+                  className={`flex h-[48px] w-full max-w-[72px] flex-col items-center justify-center gap-1 rounded-[16px] transition-colors ${active ? 'bg-sage-tint' : 'bg-transparent'
+                    }`}
                 >
                   <img
                     src={item.icon}
@@ -233,9 +225,8 @@ export function BottomNav() {
                     className={`h-[21px] w-[21px] object-contain ${active ? 'opacity-100' : 'opacity-55'}`}
                   />
                   <span
-                    className={`text-[10px] leading-none ${
-                      active ? 'font-bold text-ink' : 'font-medium text-muted'
-                    }`}
+                    className={`text-[10px] leading-none ${active ? 'font-bold text-ink' : 'font-medium text-muted'
+                      }`}
                   >
                     {item.mobileLabel}
                   </span>
