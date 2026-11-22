@@ -5,7 +5,7 @@ import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail, fetchEspnCricketPreview } from './api/_cricket.js'
 import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam } from './api/_football.js'
-import { fetchF1Telemetry } from './api/_f1telemetry.js'
+import f1StandingsHandler from './api/f1standings.js'
 import widgetScoresHandler from './api/widget-scores.js'
 
 // Dev-only parity for Vercel's api/article.js
@@ -233,29 +233,44 @@ function newsDevMiddleware() {
   }
 }
 
-// Dev-only parity for api/f1standings.js?kind=telemetry (hybrid ESPN F1 + OpenF1 Free Tier)
-function f1TelemetryDevMiddleware() {
+// Dev-only parity for api/f1standings.js
+function f1StandingsDevMiddleware() {
   return {
-    name: 'f1-telemetry-dev-middleware',
+    name: 'f1-standings-dev-middleware',
     configureServer(server) {
-      server.middlewares.use('/api/f1standings', async (req, res, next) => {
+      server.middlewares.use('/api/f1standings', async (req, res) => {
         const u = new URL(req.url, 'http://localhost')
-        if (u.searchParams.get('kind') !== 'telemetry') {
-          next()
-          return
+        const fakeReq = {
+          method: req.method,
+          url: `/api/f1standings${u.search}`,
+          query: Object.fromEntries(u.searchParams.entries()),
         }
-        const send = (status, obj) => {
-          res.statusCode = status
-          res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify(obj))
+        const fakeRes = {
+          setHeader: (k, v) => res.setHeader(k, v),
+          status: (code) => {
+            res.statusCode = code
+            return fakeRes
+          },
+          json: (obj) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(obj))
+            return fakeRes
+          },
+          send: (body) => {
+            res.end(body)
+            return fakeRes
+          },
+          end: (body) => {
+            res.end(body)
+            return fakeRes
+          },
         }
         try {
-          const sessionCode = u.searchParams.get('session') || ''
-          const data = await fetchF1Telemetry({ sessionCode })
-          res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60')
-          send(200, data)
+          await f1StandingsHandler(fakeReq, fakeRes)
         } catch (e) {
-          send(e?.status || 502, { error: `F1 telemetry unreachable: ${e?.message || 'Unknown error'}` })
+          res.statusCode = 502
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: `F1 upstream unreachable: ${e?.message || 'Unknown error'}` }))
         }
       })
     },
@@ -315,7 +330,7 @@ export default defineConfig(() => {
       cricketDevMiddleware(),
       footballDevMiddleware(),
       previewDevMiddleware(),
-      f1TelemetryDevMiddleware(),
+      f1StandingsDevMiddleware(),
       widgetScoresDevMiddleware(),
       VitePWA({
         registerType: 'autoUpdate',
@@ -376,7 +391,7 @@ export default defineConfig(() => {
             {
               urlPattern: /\/api\/f1standings.*/i,
               handler: 'NetworkFirst',
-              options: { cacheName: 'f1-standings', expiration: { maxEntries: 6, maxAgeSeconds: 3600 } },
+              options: { cacheName: 'f1-standings', expiration: { maxEntries: 12, maxAgeSeconds: 120 } },
             },
             {
               urlPattern: /^https:\/\/picsum\.photos\/.*/i,
@@ -387,31 +402,5 @@ export default defineConfig(() => {
         },
       }),
     ],
-    server: {
-      proxy: {
-        // F1 (Jolpica, no CORS upstream)
-        '/api/f1standings': {
-          target: 'https://api.jolpi.ca',
-          changeOrigin: true,
-          rewrite: (p) => {
-            const u = new URL(p, 'http://localhost')
-            const kind = u.searchParams.get('kind') || 'drivers'
-            if (kind === 'constructors') return '/ergast/f1/current/constructorstandings/'
-            if (kind === 'schedule') return '/ergast/f1/current/'
-            if (kind === 'results' || kind === 'qualifying') {
-              const round = u.searchParams.get('round') || 'last'
-              if (!/^(\d{1,2}|last)$/.test(round)) return '/ergast/f1/current/last/results/'
-              return `/ergast/f1/current/${round}/${kind}/`
-            }
-            return '/ergast/f1/current/driverstandings/'
-          },
-          configure: (proxy) => {
-            proxy.on('proxyReq', (proxyReq) => {
-              proxyReq.setHeader('Accept', 'application/json')
-            })
-          },
-        },
-      },
-    },
   }
 })

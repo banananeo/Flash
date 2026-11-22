@@ -95,9 +95,8 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
               key={t.id}
               type="button"
               onClick={() => setMode(t.id)}
-              className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${
-                active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
-              }`}
+              className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
+                }`}
             >
               {t.label}
             </button>
@@ -123,9 +122,8 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
                     key={ps.code}
                     type="button"
                     onClick={() => fetchTelemetry(ps.code)}
-                    className={`rounded-full px-3.5 py-1 text-[12px] transition-colors ${
-                      isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
-                    }`}
+                    className={`rounded-full px-3.5 py-1 text-[12px] transition-colors ${isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
+                      }`}
                   >
                     {ps.name}
                   </button>

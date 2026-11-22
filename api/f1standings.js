@@ -1,14 +1,19 @@
 // Vercel serverless route: GET /api/f1standings?kind=...
-// Passthrough to Jolpica F1 (Ergast-compatible). Single file, query-routed:
-// api.jolpi.ca sends no CORS headers, so the browser must stay same-origin.
-//   kind=drivers|constructors → /ergast/f1/current/{driver,constructor}standings/
-//   kind=schedule             → /ergast/f1/current/ (23-round calendar + sessions)
-//   kind=results&round=N|last → /ergast/f1/current/{N}/results/
-//   kind=qualifying&round=N|last → /ergast/f1/current/{N}/qualifying/
-//   kind=telemetry[&session=FP1|FP2|FP3|QUAL|RACE] → hybrid ESPN F1 (live) + OpenF1 Free Tier telemetry
-import { fetchF1Telemetry } from './_f1telemetry.js';
+// Single query-routed function serving low-latency F1 standings, results, schedule & telemetry:
+//   kind=drivers|constructors     -> Fresh driver / constructor standings
+//   kind=schedule                 -> Season calendar + session times
+//   kind=results&round=N|last     -> Fresh race classification
+//   kind=qualifying&round=N|last  -> Fresh qualifying classification
+//   kind=telemetry[&session=...]  -> Live & post-session telemetry
 
-const UPSTREAM = 'https://api.jolpi.ca/ergast/f1/current';
+import { fetchF1Telemetry } from './_f1telemetry.js';
+import {
+  fetchFreshDriverStandings,
+  fetchFreshConstructorStandings,
+  fetchFreshRaceResults,
+  fetchFreshQualifying,
+  fetchFreshSchedule,
+} from './_f1fresh.js';
 
 const ROUND_RE = /^(\d{1,2}|last)$/;
 
@@ -20,52 +25,51 @@ export default async function handler(req, res) {
 
   const url = new URL(req.url, 'http://localhost');
   const kind = url.searchParams.get('kind') || 'drivers';
+  const force = url.searchParams.has('t') || url.searchParams.get('force') === '1';
 
-  if (kind === 'telemetry') {
-    const sessionCode = url.searchParams.get('session') || '';
-    try {
-      const data = await fetchF1Telemetry({ sessionCode });
-      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
-      res.setHeader('Content-Type', 'application/json');
-      return res.status(200).json(data);
-    } catch (e) {
-      return res.status(502).json({ error: `F1 telemetry unreachable: ${e?.message || 'Unknown error'}` });
-    }
-  }
-
-  let path = '';
-  let cache = 's-maxage=3600, stale-while-revalidate=600';
-  if (kind === 'constructors') {
-    path = '/constructorstandings/';
-  } else if (kind === 'schedule') {
-    path = '/';
-    cache = 's-maxage=86400, stale-while-revalidate=3600';
-  } else if (kind === 'results' || kind === 'qualifying') {
-    const round = url.searchParams.get('round') || 'last';
-    if (!ROUND_RE.test(round)) return res.status(400).json({ error: 'Bad ?round= — use a number or last' });
-    path = `/${round}/${kind}/`;
-    cache = 's-maxage=900, stale-while-revalidate=300';
-  } else {
-    path = '/driverstandings/';
-  }
+  const setCache = (defaultHeader) => {
+    res.setHeader('Cache-Control', force ? 'no-store' : defaultHeader);
+    res.setHeader('Content-Type', 'application/json');
+  };
 
   try {
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 15000);
-    let upstream;
-    try {
-      upstream = await fetch(`${UPSTREAM}${path}`, {
-        signal: ctl.signal,
-        headers: { Accept: 'application/json' },
-      });
-    } finally {
-      clearTimeout(t);
+    if (kind === 'telemetry') {
+      const sessionCode = url.searchParams.get('session') || '';
+      const data = await fetchF1Telemetry({ sessionCode, force });
+      setCache('s-maxage=30, stale-while-revalidate=60');
+      return res.status(200).json(data);
     }
-    const body = await upstream.text();
-    res.setHeader('Cache-Control', cache);
-    res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
-    return res.status(upstream.status).send(body);
+
+    if (kind === 'schedule') {
+      const data = await fetchFreshSchedule({ force });
+      if (!data) return res.status(502).json({ error: 'F1 schedule unreachable' });
+      setCache('s-maxage=3600, stale-while-revalidate=1800');
+      return res.status(200).json(data);
+    }
+
+    if (kind === 'constructors') {
+      const data = await fetchFreshConstructorStandings({ force });
+      setCache('s-maxage=60, stale-while-revalidate=120');
+      return res.status(200).json(data);
+    }
+
+    if (kind === 'results' || kind === 'qualifying') {
+      const round = url.searchParams.get('round') || 'last';
+      if (!ROUND_RE.test(round)) {
+        return res.status(400).json({ error: 'Bad ?round= — use a number or last' });
+      }
+      const data =
+        kind === 'qualifying'
+          ? await fetchFreshQualifying(round, { force })
+          : await fetchFreshRaceResults(round, { force });
+      setCache('s-maxage=60, stale-while-revalidate=120');
+      return res.status(200).json(data);
+    }
+
+    const data = await fetchFreshDriverStandings({ force });
+    setCache('s-maxage=60, stale-while-revalidate=120');
+    return res.status(200).json(data);
   } catch (e) {
-    return res.status(502).json({ error: `F1 upstream unreachable: ${e.message}` });
+    return res.status(502).json({ error: `F1 upstream unreachable: ${e?.message || 'Unknown error'}` });
   }
 }

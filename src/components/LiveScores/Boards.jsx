@@ -300,11 +300,11 @@ function RecentFormCard({ name, matches }) {
           {matches.slice(0, 5).map((item, index) => {
             const scoreStr = formatScoreValue(item.score)
             return (
-            <div key={`${item.date}-${index}`} className="flex min-w-0 items-center gap-1.5" title={`${item.result} · ${item.opponent} · ${scoreStr} · ${formatPreviewDate(item.date)}`}>
-              <ResultPill result={item.result} />
-              <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink">{item.opponent}</span>
-              <span className="shrink-0 font-display text-[9px] font-bold text-muted">{scoreStr}</span>
-            </div>
+              <div key={`${item.date}-${index}`} className="flex min-w-0 items-center gap-1.5" title={`${item.result} · ${item.opponent} · ${scoreStr} · ${formatPreviewDate(item.date)}`}>
+                <ResultPill result={item.result} />
+                <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-ink">{item.opponent}</span>
+                <span className="shrink-0 font-display text-[9px] font-bold text-muted">{scoreStr}</span>
+              </div>
             )
           })}
         </div>
@@ -509,9 +509,8 @@ export function FootballBoard({ match, detail, loading, preview, previewLoading,
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
-              className={`rounded-full py-2 text-[13px] transition-colors ${
-                active ? 'bg-white font-semibold text-ink shadow-sm' : 'font-medium text-muted hover:text-ink'
-              }`}
+              className={`rounded-full py-2 text-[13px] transition-colors ${active ? 'bg-white font-semibold text-ink shadow-sm' : 'font-medium text-muted hover:text-ink'
+                }`}
             >
               {t.label}
             </button>
@@ -587,9 +586,8 @@ export function FootballBoard({ match, detail, loading, preview, previewLoading,
             events.map((ev, i) => (
               <div key={i} className="flex items-start gap-3.5 rounded-[16px] bg-white p-4">
                 <span
-                  className={`grid h-9 min-w-10 shrink-0 place-items-center rounded-[10px] px-2 font-display text-[12px] font-bold ${
-                    ev.kind === 'goal' ? 'bg-pulse text-ink' : 'bg-sage text-ink'
-                  }`}
+                  className={`grid h-9 min-w-10 shrink-0 place-items-center rounded-[10px] px-2 font-display text-[12px] font-bold ${ev.kind === 'goal' ? 'bg-pulse text-ink' : 'bg-sage text-ink'
+                    }`}
                 >
                   {ev.min || '•'}
                 </span>
@@ -685,9 +683,8 @@ export function CricketBoard({ match, detail, loading, preview, previewLoading, 
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`rounded-full py-2 text-[12px] transition-colors sm:text-[13px] ${
-              tab === t.id ? 'bg-white font-semibold text-ink shadow-sm' : 'font-medium text-muted hover:text-ink'
-            }`}
+            className={`rounded-full py-2 text-[12px] transition-colors sm:text-[13px] ${tab === t.id ? 'bg-white font-semibold text-ink shadow-sm' : 'font-medium text-muted hover:text-ink'
+              }`}
           >
             {t.label}
           </button>
@@ -727,13 +724,12 @@ export function CricketBoard({ match, detail, loading, preview, previewLoading, 
                 {recentBalls.map((b, i) => (
                   <span
                     key={i}
-                    className={`grid h-9 min-w-9 place-items-center rounded-[10px] px-2 font-display text-[13px] font-bold ${
-                      b === 'W'
+                    className={`grid h-9 min-w-9 place-items-center rounded-[10px] px-2 font-display text-[13px] font-bold ${b === 'W'
                         ? 'bg-live text-white'
                         : b === '6' || b === '4'
                           ? 'bg-pulse text-ink'
                           : 'bg-sage text-ink'
-                    }`}
+                      }`}
                   >
                     {b}
                   </span>

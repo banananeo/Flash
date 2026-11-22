@@ -7,7 +7,7 @@
 // calls /api/f1standings?kind= — Vite proxy in dev, api/f1standings.js
 // (single file, query-routed) on Vercel. Never call api.jolpi.ca directly.
 
-export class F1RateError extends Error {}
+export class F1RateError extends Error { }
 export class F1HttpError extends Error {
   constructor(status, message) {
     super(message || (status ? `F1 error ${status}` : 'F1 request failed'));
@@ -67,6 +67,12 @@ function tableOf(json) {
 
 // Row: { pos, num, name, acro, team, colour, points, wins, gap }
 export function normalizeDriverStandings(json) {
+  if (json?.normalized && Array.isArray(json.rows)) {
+    const rows = [...json.rows].sort((a, b) => a.pos - b.pos)
+    const leader = rows.length ? rows[0].points : 0
+    for (const r of rows) r.gap = leader - r.points
+    return { season: String(json.season || ''), round: String(json.round || ''), rows }
+  }
   const { season, round, list } = tableOf(json)
   const rows = (list.DriverStandings || []).map((s) => {
     const d = s?.Driver || {}
@@ -92,6 +98,12 @@ export function normalizeDriverStandings(json) {
 
 // Row: { pos, team, colour, points, wins, gap }
 export function normalizeTeamStandings(json) {
+  if (json?.normalized && Array.isArray(json.rows)) {
+    const rows = [...json.rows].sort((a, b) => a.pos - b.pos)
+    const leader = rows.length ? rows[0].points : 0
+    for (const r of rows) r.gap = leader - r.points
+    return { season: String(json.season || ''), round: String(json.round || ''), rows }
+  }
   const { season, round, list } = tableOf(json)
   const rows = (list.ConstructorStandings || []).map((s) => {
     const c = s?.Constructor || {}
@@ -111,7 +123,7 @@ export function normalizeTeamStandings(json) {
 }
 
 const mem = { drivers: null, driversTs: 0, teams: null, teamsTs: 0 }
-const STANDINGS_TTL = 3600 * 1000 // standings only change after a race
+const STANDINGS_TTL = 60 * 1000 // refresh quickly after race finishes
 
 export async function fetchDriverStandings() {
   if (mem.drivers && Date.now() - mem.driversTs < STANDINGS_TTL) return mem.drivers
@@ -271,6 +283,15 @@ function raceOf(json) {
 // Row: { pos (number|null — null = unclassified), posText, code…,
 //        points, grid, laps, status, time, fastest }
 export function normalizeRaceResults(json) {
+  if (json?.normalized && Array.isArray(json.rows)) {
+    return {
+      season: String(json.season || ''),
+      round: String(json.round || ''),
+      raceName: json.raceName || '',
+      circuit: json.circuit || '',
+      rows: json.rows,
+    }
+  }
   const { season, round, raceName, circuit, race } = raceOf(json)
   const rows = (race.Results || []).map((r) => {
     const p = Number(r?.position)
@@ -299,6 +320,15 @@ export function normalizeRaceResults(json) {
 
 // Row: { pos, code…, q1, q2, q3, best } — Q3 missing when knocked out
 export function normalizeQualifying(json) {
+  if (json?.normalized && Array.isArray(json.rows)) {
+    return {
+      season: String(json.season || ''),
+      round: String(json.round || ''),
+      raceName: json.raceName || '',
+      circuit: json.circuit || '',
+      rows: [...json.rows].sort((a, b) => a.pos - b.pos),
+    }
+  }
   const { season, round, raceName, circuit, race } = raceOf(json)
   const rows = (race.QualifyingResults || []).map((r) => ({
     ...driverLine(r?.Driver, r?.Constructor),
@@ -313,7 +343,7 @@ export function normalizeQualifying(json) {
 }
 
 const rmem = { results: new Map(), quali: new Map() }
-const RESULTS_TTL = 15 * 60 * 1000 // today's race flips pending→final
+const RESULTS_TTL = 60 * 1000 // refresh quickly after session finishes
 
 async function cachedMap(map, key, fetcher) {
   const hit = map.get(key)
