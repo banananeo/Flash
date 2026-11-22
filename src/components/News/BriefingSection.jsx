@@ -5,7 +5,6 @@ import { CATEGORIES } from '../../data/mockNews'
 import { useNewsStore } from '../../store/useNewsStore'
 import { useScoreStore } from '../../store/useScoreStore'
 import { useF1Store } from '../../store/useF1Store'
-import { useReminderStore } from '../../store/useReminderStore'
 import NewsFlashCard from './NewsFlashCard'
 
 function formatEditorialDate() {
@@ -34,7 +33,6 @@ function DesktopRightRail() {
   const setView = useScoreStore((s) => s.setView)
   const setSport = useScoreStore((s) => s.setSport)
   const nextRace = useF1Store((s) => s.nextRace)
-  const openReminder = useReminderStore((s) => s.openNow)
 
   const featuredMatch =
     (football || []).find((m) => m.status === 'live') ||
@@ -45,10 +43,10 @@ function DesktopRightRail() {
 
   return (
     <aside className="hidden flex-col gap-6 lg:flex">
-      {/* HAPPENING NOW */}
+      {/* Live Score Promo Card*/}
       <div>
         <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-          HAPPENING NOW
+          Live Scores
         </p>
         {featuredMatch && (
           <div className="rounded-[20px] border border-hairline bg-white p-5 text-ink shadow-sm">
@@ -118,10 +116,10 @@ function DesktopRightRail() {
         )}
       </div>
 
-      {/* THE PADDOCK */}
+      {/* F1 Promo card */}
       <div>
         <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-          THE PADDOCK
+          FORMULA 1
         </p>
         <div className="rounded-[20px] bg-sage-card p-5">
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
@@ -143,17 +141,7 @@ function DesktopRightRail() {
         </div>
       </div>
 
-      {/* Morning reminder promo card */}
-      <button
-        type="button"
-        onClick={openReminder}
-        className="rounded-[20px] bg-white p-5 text-left transition-colors hover:bg-white/80"
-      >
-        <p className="text-[19px] font-semibold leading-tight text-ink">Your morning, sorted.</p>
-        <p className="mt-2 text-[13px] leading-relaxed text-muted">
-          A quick briefing. A wider perspective. Make a little room for what matters.
-        </p>
-      </button>
+
 
 
     </aside>
@@ -162,8 +150,6 @@ function DesktopRightRail() {
 
 export default function BriefingSection() {
   const category = useNewsStore((s) => s.category)
-  const region = useNewsStore((s) => s.region)
-  const setRegion = useNewsStore((s) => s.setRegion)
   const searchQuery = useNewsStore((s) => s.searchQuery)
   const setCategory = useNewsStore((s) => s.setCategory)
   const searchNews = useNewsStore((s) => s.searchNews)
@@ -180,7 +166,6 @@ export default function BriefingSection() {
   const error = useNewsStore((s) => s.error)
   const fetchNews = useNewsStore((s) => s.fetchNews)
   const openReader = useNewsStore((s) => s.openReader)
-  const openReminder = useReminderStore((s) => s.openNow)
 
   useEffect(() => {
     fetchNews(category, searchQuery)
@@ -238,21 +223,9 @@ export default function BriefingSection() {
             })}
           </div>
 
-          <div className="my-6 h-px w-full bg-hairline" />
 
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            MAKE IT YOURS
-          </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-muted">
-            Follow your interests for a sharper daily edit.
-          </p>
-          <button
-            type="button"
-            onClick={openReminder}
-            className="mt-4 w-fit rounded-full bg-sage px-4 py-2 text-[12px] font-semibold text-ink transition-colors hover:bg-pulse"
-          >
-            Personalise feed
-          </button>
+
+
         </aside>
 
         {/* Center / Mobile Main Briefing Column — Flash Card Deck */}
@@ -261,27 +234,10 @@ export default function BriefingSection() {
             <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
               {formatEditorialDate()}
             </p>
-            <div className="inline-flex items-center rounded-full bg-sage p-0.5 text-[11px] font-semibold">
-              <button
-                type="button"
-                onClick={() => setRegion('in')}
-                className={`rounded-full px-2.5 py-1 transition-colors ${region === 'in' ? 'bg-pulse font-bold text-ink' : 'text-muted hover:text-ink'
-                  }`}
-              >
-                🇮🇳 India
-              </button>
-              <button
-                type="button"
-                onClick={() => setRegion('global')}
-                className={`rounded-full px-2.5 py-1 transition-colors ${region === 'global' ? 'bg-pulse font-bold text-ink' : 'text-muted hover:text-ink'
-                  }`}
-              >
-                🌐 Global
-              </button>
-            </div>
+
           </div>
           <h1 className="mt-1.5 text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-ink lg:text-[40px]">
-            Your daily edge.
+            Flash News.
           </h1>
           <p className="mt-1.5 hidden text-[14px] font-normal text-muted lg:block">
             Tap any flash card to flip for the summary, or open the full story.

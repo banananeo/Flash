@@ -1,13 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="FLASH! logo (maskable)">
-  <title>FLASH! — F! monogram (maskable safe zone)</title>
-  <!-- Maskable variant: artwork scaled to 82% centered so launchers can
-       crop the outer ~9% per side (circle/squircle/teardrop) without clipping. -->
-  <rect width="512" height="512" fill="#000000"/>
-  <g transform="translate(256 256) scale(0.82) translate(-256 -256)" fill="#FFDE59">
-    <rect x="104" y="116" width="76" height="280"/>
-    <rect x="104" y="116" width="244" height="72"/>
-    <rect x="104" y="244" width="204" height="64"/>
-    <polygon points="396,116 328,258 366,258 342,396 428,238 386,238 412,116"/>
-    <rect x="346" y="412" width="60" height="56"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="flash logo (maskable)">
+  <title>flash (maskable safe zone)</title>
+  <rect width="512" height="512" fill="#FFFFFF"/>
+  <g transform="translate(256 256) scale(3.3) translate(-36.62815 -36.75)">
+    <path d="M30.0656 0H72.0656C73.05 0 73.5094 0.65625 73.1156 1.575L68.5875 13.125C68.2594 13.9781 67.6031 14.4375 66.6844 14.4375H43.8469L39.2531 26.25H60.2531C61.2375 26.25 61.6969 26.9063 61.3031 27.825L56.775 39.375C56.4469 40.2281 55.7906 40.6875 54.8719 40.6875H33.675L21.4031 72.1875C21.075 73.0406 20.4188 73.5 19.5 73.5H1.19063C0.206251 73.5 -0.253124 72.8438 0.140626 71.925L12.3469 40.6875H1.19063C0.206251 40.6875 -0.253124 40.0312 0.140626 39.1125L4.66875 27.5625C4.99688 26.7094 5.65313 26.25 6.57188 26.25H17.925L27.4406 1.8375C27.9 0.65625 28.7531 0 30.0656 0Z" fill="#171916"/>
   </g>
 </svg>

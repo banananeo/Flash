@@ -56,7 +56,7 @@ export function TopBar() {
           aria-label="flash home"
         >
           <img src={flashSymbol} alt="" width={24} height={24} className="h-[24px] w-[24px] object-contain" />
-          <span className="font-display text-[20px] font-bold tracking-tight text-ink">flash</span>
+
         </button>
 
         <nav className="flex h-full items-center gap-10" aria-label="Primary">
