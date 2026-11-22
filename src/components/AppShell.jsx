@@ -20,15 +20,25 @@ const NAV_ITEMS = [
 export function TopBar() {
   const view = useScoreStore((s) => s.view)
   const setView = useScoreStore((s) => s.setView)
-  const liveCount = useScoreStore(
-    (s) => [...(s.football || []), ...(s.cricket || [])].filter((m) => m.status === 'live').length,
-  )
+  const liveCount = useScoreStore((s) => {
+    let n = 0
+    for (const m of s.football || []) if (m?.status === 'live') n++
+    for (const m of s.cricket || []) if (m?.status === 'live') n++
+    return n
+  })
   const searchQuery = useNewsStore((s) => s.searchQuery)
   const searchNews = useNewsStore((s) => s.searchNews)
   const openReminder = useReminderStore((s) => s.openNow)
 
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const [draft, setDraft] = useState(searchQuery)
+  const [prevSearchQuery, setPrevSearchQuery] = useState(searchQuery)
+
+  // Keep input draft in sync when searchQuery is cleared externally (e.g. clicking a category or Reset)
+  if (searchQuery !== prevSearchQuery) {
+    setPrevSearchQuery(searchQuery)
+    setDraft(searchQuery)
+  }
 
   const submitSearch = (e) => {
     e.preventDefault()

@@ -315,12 +315,25 @@ export default function LiveScoresSection() {
   const refreshingMatches = useScoreStore((s) => s.refreshingMatches)
   const refreshTick = useScoreStore((s) => s.refreshTick)
 
-  const [featuredCricketDetail, setFeaturedCricketDetail] = useState(null)
+  const [featuredDetailState, setFeaturedDetailState] = useState({ key: null, data: null })
 
   useEffect(() => {
     fetchScores(sport, selectedDate)
-    const t = setInterval(() => fetchScores(sport, selectedDate), 60000)
-    return () => clearInterval(t)
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      fetchScores(sport, selectedDate)
+    }
+    const onVis = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchScores(sport, selectedDate)
+      }
+    }
+    const t = setInterval(tick, 60000)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVis)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sport, selectedDate])
 
@@ -376,23 +389,30 @@ export default function LiveScoresSection() {
   const liveCount = allMatches.filter((m) => m.status === 'live').length
 
   // Load live "At the crease" batters for featured cricket match
+  const featuredCricketKey =
+    featured?.sport === 'cricket' && featured?.rawId
+      ? `${featured.rawId}:${featured.seriesId || ''}`
+      : null
+
   useEffect(() => {
-    if (featured?.sport !== 'cricket' || !featured?.rawId) {
-      setFeaturedCricketDetail(null)
-      return
-    }
+    if (!featuredCricketKey || !featured?.rawId) return undefined
     let alive = true
-    fetchCricketDetail(featured.rawId, featured.seriesId)
+    fetchCricketDetail(featured.rawId, featured.seriesId, { force: refreshTick > 0 })
       .then((d) => {
-        if (alive) setFeaturedCricketDetail(d)
+        if (alive) setFeaturedDetailState({ key: featuredCricketKey, data: d })
       })
       .catch(() => {
-        if (alive) setFeaturedCricketDetail(null)
+        if (alive) setFeaturedDetailState({ key: featuredCricketKey, data: null })
       })
     return () => {
       alive = false
     }
-  }, [featured?.sport, featured?.rawId, featured?.seriesId, refreshTick])
+  }, [featuredCricketKey, featured?.rawId, featured?.seriesId, refreshTick])
+
+  const featuredCricketDetail =
+    featuredCricketKey && featuredDetailState.key === featuredCricketKey
+      ? featuredDetailState.data
+      : null
 
   const prevDate = shiftISO(selectedDate, -1)
   const nextDate = shiftISO(selectedDate, 1)

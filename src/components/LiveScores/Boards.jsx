@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { safeColor } from '../../lib/safeUrl'
 
 function StatBar({ stat }) {
   return (
@@ -121,7 +122,7 @@ function PitchPlayer({ player, accent, isKeeper = false }) {
 function LineupPitchCard({ side, teamName, teamColor }) {
   const { keeper, rows } = getFormationRows(side)
   const hasStarters = Boolean(side?.starters?.length)
-  const accent = side?.color || teamColor
+  const accent = safeColor(side?.color || teamColor, '#191C18')
 
   return (
     <section className="min-w-0 overflow-hidden rounded-[16px] border border-hairline bg-white p-2 sm:rounded-[18px] sm:p-4">
@@ -199,7 +200,7 @@ function LineupPitchCard({ side, teamName, teamColor }) {
 function CricketLineupCard({ side, fallbackName, fallbackColor }) {
   const players = Array.isArray(side?.players) ? side.players : []
   const subs = Array.isArray(side?.subs) ? side.subs : []
-  const accent = side?.color || fallbackColor || '#0D9488'
+  const accent = safeColor(side?.color || fallbackColor, '#0D9488')
   const teamName = side?.teamName || fallbackName || 'Team'
 
   return (
@@ -420,17 +421,13 @@ export function FootballBoard({ match, detail, loading, preview, previewLoading,
   const isScheduled = match.status === 'scheduled'
   const [tab, setTab] = useState(isScheduled ? 'preview' : 'overview') // preview | overview | lineups | timeline
 
-  useEffect(() => {
-    setTab(isScheduled ? 'preview' : 'overview')
-  }, [isScheduled, match.id])
-
   const hdr = detail?.header
   const homeName = hdr?.home?.name || match.teamA?.name || 'Home'
   const awayName = hdr?.away?.name || match.teamB?.name || 'Away'
   const homeScore = hdr?.home?.score ?? match.teamA?.score ?? '–'
   const awayScore = hdr?.away?.score ?? match.teamB?.score ?? '–'
-  const homeColor = hdr?.home?.color || match.teamA?.color || '#D75043'
-  const awayColor = hdr?.away?.color || match.teamB?.color || '#5578D8'
+  const homeColor = safeColor(hdr?.home?.color || match.teamA?.color, '#D75043')
+  const awayColor = safeColor(hdr?.away?.color || match.teamB?.color, '#5578D8')
   const status = hdr?.status || match.status
   const isLive = status === 'live'
   const clock =
@@ -613,11 +610,7 @@ export function FootballBoard({ match, detail, loading, preview, previewLoading,
 // Editorial Cricket Match Centre — Scorecard | Commentary
 export function CricketBoard({ match, detail, loading, preview, previewLoading, previewError }) {
   const isScheduled = match.status === 'scheduled'
-  const [tab, setTab] = useState(isScheduled ? 'preview' : 'scorecard') // preview | scorecard | commentary
-
-  useEffect(() => {
-    setTab(isScheduled ? 'preview' : 'scorecard')
-  }, [isScheduled, match.id])
+  const [tab, setTab] = useState(isScheduled ? 'preview' : 'scorecard') // preview | scorecard | lineups | commentary
   const d = detail || {}
   const innings = d.innings || []
   const cricketLineups = d.lineups || { home: null, away: null }

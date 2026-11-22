@@ -1,18 +1,31 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import SplashScreen from './components/SplashScreen'
+import ErrorBoundary from './components/ErrorBoundary'
 import { TopBar, BottomNav } from './components/AppShell'
 import BriefingSection from './components/News/BriefingSection'
-import LiveScoresSection from './components/LiveScores/LiveScoresSection'
-import F1Section from './components/F1/F1Section'
-import ArticleModal from './components/ArticleModal'
-import ScoreboardModal from './components/LiveScores/ScoreboardModal'
 import InstallPrompt from './components/LiveScores/InstallPrompt'
-import MorningReminder from './components/MorningReminder'
 import { useScoreStore } from './store/useScoreStore'
 import { useNewsStore } from './store/useNewsStore'
 import { useF1Store } from './store/useF1Store'
 import { useReminderStore } from './store/useReminderStore'
+
+const LiveScoresSection = lazy(() => import('./components/LiveScores/LiveScoresSection'))
+const F1Section = lazy(() => import('./components/F1/F1Section'))
+const ArticleModal = lazy(() => import('./components/ArticleModal'))
+const ScoreboardModal = lazy(() => import('./components/LiveScores/ScoreboardModal'))
+const MorningReminder = lazy(() => import('./components/MorningReminder'))
+
+function SectionFallback() {
+  return (
+    <div className="mx-auto w-full max-w-[460px] space-y-4 px-6 pb-28 pt-8 lg:max-w-[780px]">
+      <div className="h-9 w-44 animate-pulse rounded-[12px] bg-sage" />
+      <div className="h-[190px] animate-pulse rounded-[20px] bg-sage" />
+      <div className="h-16 animate-pulse rounded-[16px] bg-white" />
+    </div>
+  )
+}
+
 export default function App() {
   const view = useScoreStore((s) => s.view)
   const fetchBoth = useScoreStore((s) => s.fetchBoth)
@@ -23,6 +36,8 @@ export default function App() {
   const reminderVisible = useReminderStore((s) => s.visible)
   const [splash, setSplash] = useState(true)
 
+  const hideSplash = useCallback(() => setSplash(false), [])
+
   useEffect(() => {
     // Warm scores + F1 schedule for the live badge and desktop right rail.
     fetchBoth()
@@ -31,9 +46,9 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const t = setTimeout(() => setSplash(false), 3000)
+    const t = setTimeout(hideSplash, 2200)
     return () => clearTimeout(t)
-  }, [])
+  }, [hideSplash])
 
   useEffect(() => {
     if (!readingArticle && !selectedMatch && !reminderVisible) return undefined
@@ -53,28 +68,38 @@ export default function App() {
   }, [readingArticle, selectedMatch, reminderVisible])
 
   return (
-    <div className="min-h-screen bg-paper font-sans text-ink">
-      <AnimatePresence>{splash && <SplashScreen onDone={() => setSplash(false)} />}</AnimatePresence>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-paper font-sans text-ink">
+        <AnimatePresence>{splash && <SplashScreen onDone={hideSplash} />}</AnimatePresence>
 
-      <TopBar />
+        <TopBar />
 
-      <main>
-        {view === 'scores' ? (
-          <LiveScoresSection />
-        ) : view === 'f1' ? (
-          <F1Section />
-        ) : (
-          <BriefingSection />
-        )}
-      </main>
+        <main>
+          <ErrorBoundary key={view}>
+            <Suspense fallback={<SectionFallback />}>
+              {view === 'scores' ? (
+                <LiveScoresSection />
+              ) : view === 'f1' ? (
+                <F1Section />
+              ) : (
+                <BriefingSection />
+              )}
+            </Suspense>
+          </ErrorBoundary>
+        </main>
 
-      <BottomNav />
+        <BottomNav />
 
-      {/* Editorial Story Reader, Match Centre, PWA Install & Morning Brief */}
-      <ArticleModal article={readingArticle} onClose={closeReader} />
-      <ScoreboardModal />
-      <InstallPrompt />
-      <MorningReminder />
-    </div>
+        {/* Editorial Story Reader, Match Centre, PWA Install & Morning Brief */}
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <ArticleModal article={readingArticle} onClose={closeReader} />
+            <ScoreboardModal />
+            <MorningReminder />
+          </Suspense>
+        </ErrorBoundary>
+        <InstallPrompt />
+      </div>
+    </ErrorBoundary>
   )
 }

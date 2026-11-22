@@ -57,8 +57,19 @@ export default function F1Countdown({ nextRace, schedule, season }) {
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    const timer = setInterval(() => setNowMs(Date.now()), 1000)
-    return () => clearInterval(timer)
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      setNowMs(Date.now())
+    }
+    const onVis = () => {
+      if (typeof document !== 'undefined' && !document.hidden) setNowMs(Date.now())
+    }
+    const timer = setInterval(tick, 1000)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVis)
+    }
   }, [])
 
   const nextSession = deriveNextSession(schedule, nowMs)

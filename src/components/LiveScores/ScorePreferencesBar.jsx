@@ -22,8 +22,21 @@ export default function ScorePreferencesBar({ defaultOpen = false }) {
   const toggleFavLeague = useScoreStore((s) => s.toggleFavLeague)
   const clearSelections = useScoreStore((s) => s.clearSelections)
 
-  const [open, setOpen] = useState(defaultOpen)
+  const [manualOpen, setManualOpen] = useState(null)
+  const [prevDefaultOpen, setPrevDefaultOpen] = useState(defaultOpen)
   const [query, setQuery] = useState('')
+
+  if (defaultOpen !== prevDefaultOpen) {
+    setPrevDefaultOpen(defaultOpen)
+    if (defaultOpen) setManualOpen(true)
+  }
+  const open = manualOpen ?? defaultOpen
+  const setOpen = (next) => {
+    setManualOpen((cur) => {
+      const current = cur ?? defaultOpen
+      return typeof next === 'function' ? next(current) : next
+    })
+  }
 
   const pool = useMemo(() => {
     if (sport === 'football') return football || []

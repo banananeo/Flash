@@ -1,27 +1,25 @@
 // Vercel serverless route: GET /api/cricket/detail?id=<matchId>&series=<seriesId>
-// Backed by ESPN Cricket summary + playbyplay public JSON APIs (no API key).
-import { setCors, fetchEspnMatchDetail } from '../_cricket.js';
+import { fetchEspnMatchDetail } from '../_cricket.js';
+import { applyApiSecurity, sendApiError } from '../_security.js';
 
 export default async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (applyApiSecurity(req, res)) return;
 
   const url = new URL(req.url, 'http://localhost');
-  const id = url.searchParams.get('id') || url.searchParams.get('matchId');
+  const id = url.searchParams.get('id') || url.searchParams.get('matchId') || '';
   const series = url.searchParams.get('series') || url.searchParams.get('seriesId') || '';
+  const noCache = url.searchParams.has('t');
 
   if (!id) {
-    return res.status(400).json({ error: 'Missing ?id= ESPN match id' });
+    return sendApiError(res, 400, 'Missing ?id= match id');
   }
 
   try {
     const detail = await fetchEspnMatchDetail(id, series);
-    res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
+    res.setHeader('Cache-Control', noCache ? 'no-store' : 's-maxage=30, stale-while-revalidate=30');
     res.setHeader('Content-Type', 'application/json');
     return res.status(200).json(detail);
   } catch (e) {
-    return res.status(e?.status || 502).json({
-      error: e?.message || 'ESPN Cricket detail failed',
-    });
+    return sendApiError(res, e?.status === 400 || e?.status === 404 ? e.status : 502, 'Cricket scoreboard unavailable.');
   }
 }

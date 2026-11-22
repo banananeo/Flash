@@ -1,5 +1,24 @@
+import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useScoreStore, todayISO } from '../../store/useScoreStore'
+import { safeImageUrl } from '../../lib/safeUrl'
+
+function TeamLogo({ src }) {
+  const [failed, setFailed] = useState(false)
+  const safeSrc = safeImageUrl(src)
+  if (!safeSrc || failed) return null
+  return (
+    <img
+      src={safeSrc}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="h-5 w-5 shrink-0 object-contain"
+    />
+  )
+}
 
 // Clean white rounded editorial match row ("Around the grounds" & "Your Leagues & Teams").
 export default function MatchCard({ match, isFav = false, onToggleFav, showLeagueBadge = false }) {
@@ -51,14 +70,7 @@ export default function MatchCard({ match, isFav = false, onToggleFav, showLeagu
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            {match.teamA.logo && (
-              <img
-                src={match.teamA.logo}
-                alt=""
-                loading="lazy"
-                className="h-5 w-5 shrink-0 object-contain"
-              />
-            )}
+            <TeamLogo src={match.teamA.logo} />
             <span className="min-w-0 break-words text-[15px] font-medium leading-tight text-ink">
               {match.teamA.name}
             </span>
@@ -70,14 +82,7 @@ export default function MatchCard({ match, isFav = false, onToggleFav, showLeagu
 
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            {match.teamB.logo && (
-              <img
-                src={match.teamB.logo}
-                alt=""
-                loading="lazy"
-                className="h-5 w-5 shrink-0 object-contain"
-              />
-            )}
+            <TeamLogo src={match.teamB.logo} />
             <span className="min-w-0 break-words text-[15px] font-medium leading-tight text-ink">
               {match.teamB.name}
             </span>

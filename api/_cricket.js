@@ -32,7 +32,7 @@ export function setCors(res) {
 }
 
 // Mirrors python-espncricinfo/_core.py retry policy for ESPN's intermittent 503s.
-export async function fetchJson(url, { timeoutMs = 10000, retries = 1 } = {}) {
+export async function fetchJson(url, { timeoutMs = 6500, retries = 1 } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctl = new AbortController();
@@ -245,7 +245,7 @@ export async function fetchEspnLiveMatches(date = '', options = {}) {
   const datesToFetch = [safeDate, ...(includeUpcoming ? getNextCricketDates(safeDate, 3) : [])];
   const settled = await Promise.allSettled(
     datesToFetch.map((d, idx) =>
-      fetchJson(espnHeaderUrl(d), { timeoutMs: idx === 0 ? 10000 : 8000, retries: idx === 0 ? 1 : 0 }),
+      fetchJson(espnHeaderUrl(d), { timeoutMs: idx === 0 ? 6500 : 5500, retries: idx === 0 ? 1 : 0 }),
     ),
   );
 
@@ -732,14 +732,20 @@ export async function fetchEspnCricketPreview({
   const homeTeamId = String(homeId || '').trim();
   const awayTeamId = String(awayId || '').trim();
   const dates = formatDateRange(date);
-  if (!/^[a-z0-9._-]+$/i.test(series) || !dates) {
+  if (
+    !series ||
+    series.length > 48 ||
+    series.includes('..') ||
+    !/^[a-z0-9._-]+$/i.test(series) ||
+    !dates
+  ) {
     return { form: { home: [], away: [] }, headToHead: [], standings: null };
   }
 
   const root = `https://site.api.espn.com/apis/site/v2/sports/cricket/${encodeURIComponent(series)}`;
   const [historyResult, standingsResult] = await Promise.allSettled([
-    fetchJson(`${root}/scoreboard?dates=${encodeURIComponent(dates)}`, { timeoutMs: 10000, retries: 0 }),
-    fetchJson(`${root}/standings`, { timeoutMs: 9000, retries: 0 }),
+    fetchJson(`${root}/scoreboard?dates=${encodeURIComponent(dates)}`, { timeoutMs: 6500, retries: 0 }),
+    fetchJson(`${root}/standings`, { timeoutMs: 6000, retries: 0 }),
   ]);
 
   let history = historyResult.status === 'fulfilled'

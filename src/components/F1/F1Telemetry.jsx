@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CloudRain, Flag, Gauge, Pause, Play, RefreshCw, Sun, Thermometer, Timer, Volume2, Wind } from 'lucide-react'
 import { useF1Store } from '../../store/useF1Store'
+import { safeHttpUrl } from '../../lib/safeUrl'
 
 const pad2 = (n) => String(n).padStart(2, '0')
 const teamColour = (c) => `#${String(c || '64748B').replace(/^#/, '')}`
@@ -59,8 +60,18 @@ export default function F1Telemetry() {
   const raceControl = telemetry?.raceControl || []
   const teamRadio = telemetry?.teamRadio || []
 
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
+
   const toggleAudio = (clip) => {
-    if (!clip?.url) return
+    const safeUrl = safeHttpUrl(clip?.url)
+    if (!safeUrl) return
     if (playingId === clip.id && audioRef.current) {
       audioRef.current.pause()
       setPlayingId(null)
@@ -69,7 +80,7 @@ export default function F1Telemetry() {
     if (audioRef.current) {
       audioRef.current.pause()
     }
-    const audio = new Audio(clip.url)
+    const audio = new Audio(safeUrl)
     audioRef.current = audio
     setPlayingId(clip.id)
     audio.onended = () => setPlayingId(null)

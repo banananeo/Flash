@@ -86,29 +86,23 @@ export const useNewsStore = create((set, get) => ({
 
   swipe: (dir = 'right') =>
     set((s) => {
-      if (!s.cards?.length) return {}
-      if (dir === 'left') {
-        // Swipe left advances to next story as well (classic flash-card deck swipe),
-        // while keeping exit direction 'left'
-        return {
-          topIndex: s.topIndex + 1,
-          isFlipped: false,
-          lastDir: 'left',
-        }
-      }
+      if (!s.cards?.length || s.topIndex >= s.cards.length) return {}
       return {
-        topIndex: s.topIndex + 1,
+        topIndex: Math.min(s.cards.length, s.topIndex + 1),
         isFlipped: false,
-        lastDir: 'right',
+        lastDir: dir === 'left' ? 'left' : 'right',
       }
     }),
 
   nextCard: () =>
-    set((s) => ({
-      topIndex: s.topIndex + 1,
-      isFlipped: false,
-      lastDir: 'right',
-    })),
+    set((s) => {
+      if (!s.cards?.length || s.topIndex >= s.cards.length) return {}
+      return {
+        topIndex: Math.min(s.cards.length, s.topIndex + 1),
+        isFlipped: false,
+        lastDir: 'right',
+      }
+    }),
 
   prevCard: () =>
     set((s) => ({

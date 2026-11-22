@@ -111,5 +111,6 @@ export const useReminderStore = create((set, get) => {
     },
 
     openSettings: () => set({ visible: true }),
+    openNow: () => set({ visible: true }),
   }
 })

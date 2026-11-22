@@ -1,74 +1,52 @@
-// Vercel serverless full-article extraction.
-// Why server-side: publisher pages block cross-origin browser fetches (CORS),
-// so the browser can never scrape them directly. The client calls:
-//   GET /api/article?url=<encoded publisher URL>
-// Response: { title, byline, image, paragraphs[], url }
-// Failures (paywall/403/timeout/SSRF-block) return 4xx/502 JSON — the client
-// then falls back to summary + "Open original" link, never a blank modal.
-import { extractArticle, assertPublicHttpUrl as assertPublicUrl } from './_extract.js';
+// Vercel serverless full-article extraction with hardened SSRF & DoS protection.
+// GET /api/article?url=<encoded publisher URL>
+import { extractArticle, assertPublicHttpUrl, fetchSafePublicHtml } from './_extract.js';
 import { fetchEspnStory } from './_news.js';
+import { applyApiSecurity, sendApiError } from './_security.js';
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (applyApiSecurity(req, res)) return;
 
-  const raw = req.query?.url;
-  if (!raw || typeof raw !== 'string') {
-    return res.status(400).json({ error: 'Missing ?url=' });
+  const urlObj = new URL(req.url, 'http://localhost');
+  const raw = urlObj.searchParams.get('url') || '';
+  if (!raw) {
+    return sendApiError(res, 400, 'Missing ?url=');
   }
 
   let target;
   try {
-    target = assertPublicUrl(raw);
+    target = assertPublicHttpUrl(raw);
   } catch (e) {
-    return res.status(e.status || 400).json({ error: e.message });
+    return sendApiError(res, e.status || 400, e.message === 'BLOCKED_HOST' ? 'Blocked host' : 'Invalid article URL');
   }
 
   try {
-    // ESPN story pages are JS-rendered → read the body from ESPN's content API
+    // JS-rendered sports stories fast path
     const espn = await fetchEspnStory(target).catch(() => null);
     if (espn) {
       res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=300');
+      res.setHeader('Content-Type', 'application/json');
       return res.status(200).json(espn);
     }
 
-    const ctl = new AbortController();
-    const t = setTimeout(() => ctl.abort(), 12000);
-    let upstream;
-    try {
-      upstream = await fetch(target, {
-        signal: ctl.signal,
-        redirect: 'follow',
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-        },
-      });
-    } finally {
-      clearTimeout(t);
+    const { html, finalUrl } = await fetchSafePublicHtml(target, { timeoutMs: 8000 });
+    if (!/^\s*</.test(html) || html.length < 1200) {
+      return sendApiError(res, 502, 'Publisher returned an unreadable page.');
     }
-    if (upstream.status === 401 || upstream.status === 403) {
-      return res.status(402).json({ error: 'PAYWALLED: publisher blocks readers — open the original instead.' });
-    }
-    if (!upstream.ok) {
-      return res.status(502).json({ error: `Publisher returned ${upstream.status}` });
-    }
-    const html = await upstream.text();
-    if (!/^\s*</.test(html) || html.length < 2000) {
-      return res.status(502).json({ error: 'Publisher returned an unreadable page.' });
-    }
-    const article = extractArticle(html, upstream.url || target);
+    const article = extractArticle(html, finalUrl);
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate=300');
+    res.setHeader('Content-Type', 'application/json');
     return res.status(200).json(article);
   } catch (e) {
-    if (e?.code === 'PAYWALL_OR_EMPTY' || /PAYWALL_OR_EMPTY/.test(e?.message || '')) {
-      return res.status(402).json({ error: 'PAYWALLED_OR_JS: full text needs the original page — open it instead.' });
+    if (e?.status === 402 || e?.code === 'PAYWALL_OR_EMPTY' || /PAYWALL_OR_EMPTY/.test(e?.message || '')) {
+      return sendApiError(res, 402, 'PAYWALLED_OR_JS: full text needs the original page — open it instead.');
+    }
+    if (e?.status === 400) {
+      return sendApiError(res, 400, 'Blocked or invalid article URL.');
     }
     if (e?.name === 'AbortError') {
-      return res.status(504).json({ error: 'Publisher timed out — open the original instead.' });
+      return sendApiError(res, 504, 'Publisher timed out — open the original instead.');
     }
-    return res.status(502).json({ error: `Extraction failed: ${e.message}` });
+    return sendApiError(res, e?.status === 413 ? 413 : 502, 'Could not extract article text.');
   }
 }

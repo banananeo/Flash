@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { defineConfig } from 'vite'
 import { getNews, fetchEspnStory } from './api/_news.js'
-import { extractArticle, assertPublicHttpUrl } from './api/_extract.js'
+import { extractArticle, assertPublicHttpUrl, fetchSafePublicHtml } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail, fetchEspnCricketPreview } from './api/_cricket.js'
 import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam } from './api/_football.js'
 import f1StandingsHandler from './api/f1standings.js'
@@ -27,37 +27,17 @@ function articleDevMiddleware() {
             send(200, espn)
             return
           }
-          const ctl = new AbortController()
-          const t = setTimeout(() => ctl.abort(), 12000)
-          let upstream
-          try {
-            upstream = await fetch(target, {
-              signal: ctl.signal,
-              redirect: 'follow',
-              headers: {
-                'User-Agent':
-                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
-                Accept: 'text/html,application/xhtml+xml',
-              },
-            })
-          } finally {
-            clearTimeout(t)
-          }
-          if (upstream.status === 401 || upstream.status === 403) {
-            send(402, { error: 'PAYWALLED: publisher blocks readers — open the original instead.' })
+          const { html, finalUrl } = await fetchSafePublicHtml(target, { timeoutMs: 8000 })
+          if (!/^\s*</.test(html) || html.length < 1200) {
+            send(502, { error: 'Publisher returned an unreadable page.' })
             return
           }
-          if (!upstream.ok) {
-            send(502, { error: `Publisher returned ${upstream.status}` })
-            return
-          }
-          const html = await upstream.text()
-          send(200, extractArticle(html, upstream.url || target))
+          send(200, extractArticle(html, finalUrl))
         } catch (e) {
-          if (/PAYWALL_OR_EMPTY/.test(e?.message || '')) {
+          if (e?.status === 402 || /PAYWALL_OR_EMPTY/.test(e?.message || '')) {
             send(402, { error: 'PAYWALLED_OR_JS: full text needs the original page — open it instead.' })
           } else {
-            send(e.status || 502, { error: e.message || 'Extraction failed' })
+            send(e?.status || 502, { error: e?.status === 400 ? 'Blocked or invalid article URL.' : 'Extraction failed' })
           }
         }
       })
@@ -97,7 +77,7 @@ function cricketDevMiddleware() {
               return
             }
             const detail = await fetchEspnMatchDetail(id, series)
-            res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
+            res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
             send(200, detail)
             return
           }
@@ -141,7 +121,7 @@ function footballDevMiddleware() {
               return
             }
             const detail = await fetchEspnFootballDetail(id, league)
-            res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30')
+            res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
             send(200, detail)
             return
           }
@@ -242,6 +222,7 @@ function f1StandingsDevMiddleware() {
         const u = new URL(req.url, 'http://localhost')
         const fakeReq = {
           method: req.method,
+          headers: req.headers,
           url: `/api/f1standings${u.search}`,
           query: Object.fromEntries(u.searchParams.entries()),
         }
@@ -286,6 +267,7 @@ function widgetScoresDevMiddleware() {
         const u = new URL(req.url, 'http://localhost')
         const fakeReq = {
           method: req.method,
+          headers: req.headers,
           url: `/api/widget-scores${u.search}`,
           query: Object.fromEntries(u.searchParams.entries()),
         }

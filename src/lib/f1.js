@@ -15,25 +15,34 @@ export class F1HttpError extends Error {
   }
 }
 
+const inflightSameOrigin = new Map()
+
 async function fetchSameOrigin(path, { timeoutMs = 15000 } = {}) {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
-  let res;
-  try {
-    res = await fetch(path, { signal: ctl.signal });
-  } catch (e) {
-    if (e?.name === 'AbortError') throw new F1HttpError(0, 'F1 request timed out');
-    throw new F1HttpError(0, 'Network blocked — check connection / ad-blocker / VPN');
-  } finally {
-    clearTimeout(t);
-  }
-  if (res.status === 429) throw new F1RateError('F1 rate limit hit — backing off');
-  if (!res.ok) throw new F1HttpError(res.status);
-  try {
-    return await res.json();
-  } catch {
-    throw new F1HttpError(res.status, 'F1 sent a bad response');
-  }
+  if (inflightSameOrigin.has(path)) return inflightSameOrigin.get(path)
+  const job = (async () => {
+    const ctl = new AbortController()
+    const t = setTimeout(() => ctl.abort(), timeoutMs)
+    let res
+    try {
+      res = await fetch(path, { signal: ctl.signal })
+    } catch (e) {
+      if (e?.name === 'AbortError') throw new F1HttpError(0, 'F1 request timed out')
+      throw new F1HttpError(0, 'Network blocked — check connection / ad-blocker / VPN')
+    } finally {
+      clearTimeout(t)
+    }
+    if (res.status === 429) throw new F1RateError('F1 rate limit hit — backing off')
+    if (!res.ok) throw new F1HttpError(res.status)
+    try {
+      return await res.json()
+    } catch {
+      throw new F1HttpError(res.status, 'F1 sent a bad response')
+    }
+  })().finally(() => {
+    inflightSameOrigin.delete(path)
+  })
+  inflightSameOrigin.set(path, job)
+  return job
 }
 
 // Jolpica carries no team colours → static map (2026 grid incl. Audi,

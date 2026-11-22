@@ -21,20 +21,23 @@ const HEADERS = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchJsonSafe(url, timeoutMs = 8000, retries = 2) {
+const VALID_SESSION_CODES = new Set(['', 'FP1', 'FP2', 'FP3', 'SQ', 'SPR', 'QUAL', 'RACE']);
+const MAX_TELEMETRY_CACHE = 10;
+
+async function fetchJsonSafe(url, timeoutMs = 4500, retries = 1) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), timeoutMs);
     try {
       const res = await fetch(url, { signal: ctl.signal, headers: HEADERS });
       if (res.status === 429 && attempt < retries) {
-        await sleep(1100 * (attempt + 1));
+        await sleep(550 * (attempt + 1));
         continue;
       }
       if (!res.ok) return null;
       return await res.json();
     } catch {
-      if (attempt < retries) await sleep(500);
+      if (attempt < retries) await sleep(350);
     } finally {
       clearTimeout(t);
     }
@@ -42,9 +45,17 @@ async function fetchJsonSafe(url, timeoutMs = 8000, retries = 2) {
   return null;
 }
 
-// In-memory cache so repeated requests or tab switches respect OpenF1's 3 req/sec & 30 req/min limit
+// Bounded in-memory cache so repeated requests respect OpenF1's rate limits without memory leaks
 const telemetryCache = new Map();
 let meetingMetaCache = { ts: 0, openMeeting: null, openSessionList: [] };
+
+function setBoundedCache(key, value) {
+  if (telemetryCache.size >= MAX_TELEMETRY_CACHE && !telemetryCache.has(key)) {
+    const oldest = telemetryCache.keys().next().value;
+    if (oldest !== undefined) telemetryCache.delete(oldest);
+  }
+  telemetryCache.set(key, value);
+}
 
 export function formatLapDuration(seconds) {
   const s = Number(seconds);
@@ -142,19 +153,21 @@ function normalizeEspnEvent(ev) {
   };
 }
 
-export async function fetchF1Telemetry({ sessionCode = '' } = {}) {
-  const cacheKey = String(sessionCode || 'auto').toUpperCase();
+export async function fetchF1Telemetry({ sessionCode = '', force = false } = {}) {
+  const rawCode = String(sessionCode || '').trim().toUpperCase();
+  const safeCode = VALID_SESSION_CODES.has(rawCode) ? rawCode : '';
+  const cacheKey = safeCode || 'AUTO';
   const cached = telemetryCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < 45 * 1000) {
+  if (!force && cached && Date.now() - cached.ts < 45 * 1000) {
     return cached.data;
   }
 
-  // 1) Fetch ESPN F1 header + OpenF1 meeting/sessions (cached 5 min to save OpenF1 quota)
+  // 1) Fetch session header + OpenF1 meeting/sessions (cached 5 min to respect rate limits)
   const needMeetingMeta = Date.now() - meetingMetaCache.ts > 5 * 60 * 1000 || !meetingMetaCache.openSessionList.length;
   const [espnJson, openMeetings, openSessions] = await Promise.all([
-    fetchJsonSafe(ESPN_F1_HEADER_URL, 8000, 1),
-    needMeetingMeta ? fetchJsonSafe(`${OPENF1_BASE}/meetings?meeting_key=latest`, 7000) : Promise.resolve([meetingMetaCache.openMeeting]),
-    needMeetingMeta ? fetchJsonSafe(`${OPENF1_BASE}/sessions?meeting_key=latest`, 7000) : Promise.resolve(meetingMetaCache.openSessionList),
+    fetchJsonSafe(ESPN_F1_HEADER_URL, 4500, 1),
+    needMeetingMeta ? fetchJsonSafe(`${OPENF1_BASE}/meetings?meeting_key=latest`, 4000, 0) : Promise.resolve([meetingMetaCache.openMeeting]),
+    needMeetingMeta ? fetchJsonSafe(`${OPENF1_BASE}/sessions?meeting_key=latest`, 4000, 0) : Promise.resolve(meetingMetaCache.openSessionList),
   ]);
 
   const espnEvents = (espnJson?.sports?.[0]?.leagues?.[0]?.events || []).map(normalizeEspnEvent);
@@ -207,7 +220,7 @@ export async function fetchF1Telemetry({ sessionCode = '' } = {}) {
 
   // Choose which session to inspect:
   // explicit sessionCode -> currently live session -> latest finished session with data -> first session
-  const requestedCode = String(sessionCode || '').toUpperCase();
+  const requestedCode = safeCode;
   const activeSessionMeta =
     sessions.find((s) => s.code === requestedCode) ||
     sessions.find((s) => s.status === 'live') ||
@@ -220,18 +233,18 @@ export async function fetchF1Telemetry({ sessionCode = '' } = {}) {
   const openActive = openByCode.get(activeCode) || null;
   const targetSessionKey = openActive?.session_key || 'latest';
 
-  // 2) Fetch OpenF1 telemetry streams in two 3-req waves (respects OpenF1's 3 req/sec free rate limit)
-  if (needMeetingMeta) await sleep(950);
+  // 2) Fetch OpenF1 telemetry streams in two paced 3-req waves within Vercel's 10s budget
+  if (needMeetingMeta) await sleep(650);
   const [openDrivers, openLaps, openStints] = await Promise.all([
-    fetchJsonSafe(`${OPENF1_BASE}/drivers?session_key=${targetSessionKey}`, 7500),
-    fetchJsonSafe(`${OPENF1_BASE}/laps?session_key=${targetSessionKey}`, 8500),
-    fetchJsonSafe(`${OPENF1_BASE}/stints?session_key=${targetSessionKey}`, 7500),
+    fetchJsonSafe(`${OPENF1_BASE}/drivers?session_key=${targetSessionKey}`, 3500, 0),
+    fetchJsonSafe(`${OPENF1_BASE}/laps?session_key=${targetSessionKey}`, 4000, 0),
+    fetchJsonSafe(`${OPENF1_BASE}/stints?session_key=${targetSessionKey}`, 3500, 0),
   ]);
-  await sleep(1000);
+  await sleep(650);
   const [openWeather, openRaceControl, openRadio] = await Promise.all([
-    fetchJsonSafe(`${OPENF1_BASE}/weather?session_key=${targetSessionKey}`, 7000),
-    fetchJsonSafe(`${OPENF1_BASE}/race_control?session_key=${targetSessionKey}`, 7500),
-    fetchJsonSafe(`${OPENF1_BASE}/team_radio?session_key=${targetSessionKey}`, 7000),
+    fetchJsonSafe(`${OPENF1_BASE}/weather?session_key=${targetSessionKey}`, 3000, 0),
+    fetchJsonSafe(`${OPENF1_BASE}/race_control?session_key=${targetSessionKey}`, 3500, 0),
+    fetchJsonSafe(`${OPENF1_BASE}/team_radio?session_key=${targetSessionKey}`, 3000, 0),
   ]);
 
   const driverMetaByNum = new Map();
@@ -497,8 +510,8 @@ export async function fetchF1Telemetry({ sessionCode = '' } = {}) {
   };
 
   if (drivers.length) {
-    telemetryCache.set(cacheKey, { ts: Date.now(), data: result });
-    telemetryCache.set(activeCode, { ts: Date.now(), data: result });
+    setBoundedCache(cacheKey, { ts: Date.now(), data: result });
+    setBoundedCache(activeCode, { ts: Date.now(), data: result });
   }
   return result;
 }

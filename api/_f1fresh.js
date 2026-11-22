@@ -83,7 +83,7 @@ function canonicalTeamKey(name = '') {
   return n;
 }
 
-async function fetchJsonSafe(url, timeoutMs = 10000) {
+async function fetchJsonSafe(url, timeoutMs = 7000) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
@@ -103,37 +103,59 @@ const cache = {
   liveHeader: { ts: 0, data: null },
 };
 
+// In-flight promise coalescing: parallel requests (drivers + constructors + results + qualifying)
+// share a single upstream fetch instead of firing duplicate network calls.
+const inflight = new Map();
+
+function coalesce(key, fn) {
+  const existing = inflight.get(key);
+  if (existing) return existing;
+  const p = Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      if (inflight.get(key) === p) inflight.delete(key);
+    });
+  inflight.set(key, p);
+  return p;
+}
+
 async function getLiveStandings(force = false) {
   if (!force && cache.liveStandings.data && Date.now() - cache.liveStandings.ts < 45 * 1000) {
     return cache.liveStandings.data;
   }
-  const json = await fetchJsonSafe(LIVE_STANDINGS_URL, 9000);
-  if (json?.children?.length) {
-    cache.liveStandings = { ts: Date.now(), data: json };
-  }
-  return json || cache.liveStandings.data;
+  return coalesce(force ? 'standings-force' : 'standings', async () => {
+    const json = await fetchJsonSafe(LIVE_STANDINGS_URL, 7000);
+    if (json?.children?.length) {
+      cache.liveStandings = { ts: Date.now(), data: json };
+    }
+    return json || cache.liveStandings.data;
+  });
 }
 
 async function getLiveHeader(force = false) {
   if (!force && cache.liveHeader.data && Date.now() - cache.liveHeader.ts < 30 * 1000) {
     return cache.liveHeader.data;
   }
-  const json = await fetchJsonSafe(LIVE_HEADER_URL, 9000);
-  if (json?.sports?.length) {
-    cache.liveHeader = { ts: Date.now(), data: json };
-  }
-  return json || cache.liveHeader.data;
+  return coalesce(force ? 'header-force' : 'header', async () => {
+    const json = await fetchJsonSafe(LIVE_HEADER_URL, 7000);
+    if (json?.sports?.length) {
+      cache.liveHeader = { ts: Date.now(), data: json };
+    }
+    return json || cache.liveHeader.data;
+  });
 }
 
 export async function fetchFreshSchedule({ force = false } = {}) {
   if (!force && cache.schedule.data && Date.now() - cache.schedule.ts < 6 * 3600 * 1000) {
     return cache.schedule.data;
   }
-  const json = await fetchJsonSafe(`${ARCHIVE_BASE}/`, 12000);
-  if (json?.MRData?.RaceTable?.Races?.length) {
-    cache.schedule = { ts: Date.now(), data: json };
-  }
-  return json || cache.schedule.data;
+  return coalesce(force ? 'schedule-force' : 'schedule', async () => {
+    const json = await fetchJsonSafe(`${ARCHIVE_BASE}/`, 7500);
+    if (json?.MRData?.RaceTable?.Races?.length) {
+      cache.schedule = { ts: Date.now(), data: json };
+    }
+    return json || cache.schedule.data;
+  });
 }
 
 function getScheduleRaces(scheduleJson) {

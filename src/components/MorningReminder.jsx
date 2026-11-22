@@ -18,7 +18,6 @@ export default function MorningReminder() {
   const check = useReminderStore((s) => s.check)
   const setView = useScoreStore((s) => s.setView)
   const cards = useNewsStore((s) => s.cards)
-  const [canNotify, setCanNotify] = useState(false)
 
   useEffect(() => {
     check()
@@ -28,12 +27,21 @@ export default function MorningReminder() {
   }, [])
 
   useEffect(() => {
-    try {
-      setCanNotify(typeof Notification !== 'undefined' && Notification.permission === 'default')
-    } catch {
-      setCanNotify(false)
+    if (!visible) return undefined
+    const onKey = (e) => {
+      if (e.key === 'Escape') dismiss()
     }
-  }, [visible])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visible, dismiss])
+
+  const [canNotify, setCanNotify] = useState(() => {
+    try {
+      return typeof Notification !== 'undefined' && Notification.permission === 'default'
+    } catch {
+      return false
+    }
+  })
 
   const enablePopups = async () => {
     try {

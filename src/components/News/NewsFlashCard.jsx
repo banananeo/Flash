@@ -3,6 +3,7 @@ import { motion, useMotionValue, useTransform } from 'framer-motion'
 import { BookOpen, Clock, FlipHorizontal2, Sparkles } from 'lucide-react'
 import { categoryLabel } from '../../data/mockNews'
 import { timeAgo } from '../../hooks/useNews'
+import { safeImageUrl } from '../../lib/safeUrl'
 import { useNewsStore } from '../../store/useNewsStore'
 
 export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
@@ -35,10 +36,10 @@ export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
   }
 
   const exitX = lastDir === 'left' ? -420 : 420
+  const imageSrc = safeImageUrl(article.image)
 
   return (
     <motion.div
-      key={article.id || article.url}
       initial={{ opacity: 0, y: 22, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{
@@ -68,10 +69,12 @@ export default function NewsFlashCard({ article, onSwipe, onReadFull }) {
         {/* ================= FRONT: IMAGE + TITLE ================= */}
         <div className="backface-hidden absolute inset-0 flex flex-col overflow-hidden rounded-[22px] border border-hairline bg-white shadow-sm">
           <div className="relative h-[225px] w-full shrink-0 overflow-hidden bg-sage sm:h-[265px]">
-            {imgOk && article.image ? (
+            {imgOk && imageSrc ? (
               <img
-                src={article.image}
+                src={imageSrc}
                 alt={article.title}
+                decoding="async"
+                referrerPolicy="no-referrer"
                 onError={() => setImgOk(false)}
                 draggable={false}
                 className="h-full w-full object-cover"

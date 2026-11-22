@@ -1,15 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import flashSymbol from '../assets/icons/flash-symbol.svg'
 
 // 01 · Splash — quiet warm-paper boot screen with italic f mark + loading track.
 export default function SplashScreen({ onDone }) {
   const reduced = useReducedMotion()
+  const onDoneRef = useRef(onDone)
 
   useEffect(() => {
-    const t = setTimeout(() => onDone?.(), reduced ? 250 : 1150)
+    onDoneRef.current = onDone
+  }, [onDone])
+
+  useEffect(() => {
+    const t = setTimeout(() => onDoneRef.current?.(), reduced ? 250 : 1150)
     return () => clearTimeout(t)
-  }, [onDone, reduced])
+  }, [reduced])
 
   return (
     <motion.div

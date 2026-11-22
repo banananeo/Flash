@@ -21,9 +21,13 @@ export default function ScoreboardModal() {
   const [copied, setCopied] = useState(false)
   const panelRef = useRef(null)
   const lastFocus = useRef(null)
+  const copyTimerRef = useRef(null)
+  const lastTickRef = useRef(refreshTick)
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), [])
 
   useEffect(() => {
-    if (!selected) return
+    if (!selected) return undefined
     const onKey = (e) => {
       if (e.key === 'Escape') closeMatch()
     }
@@ -31,8 +35,9 @@ export default function ScoreboardModal() {
     return () => window.removeEventListener('keydown', onKey)
   }, [selected, closeMatch])
 
+  const selectedId = selected?.id || null
   useEffect(() => {
-    if (!selected) return undefined
+    if (!selectedId) return undefined
     lastFocus.current = document.activeElement
     panelRef.current?.focus({ preventScroll: true })
     return () => {
@@ -42,23 +47,26 @@ export default function ScoreboardModal() {
         } catch { /* ignore */ }
       }
     }
-  }, [selected])
+  }, [selectedId])
 
   const reqKey = selected?.rawId
     ? `${selected.sport}:${selected.rawId}:${selected.seriesId || selected.leagueSlug || ''}`
     : null
-  const previewKey = selected?.status === 'scheduled' && reqKey
-    ? `${reqKey}:${selected.time || selected.dateISO || ''}`
-    : null
+  const previewKey =
+    selected?.status === 'scheduled' && reqKey
+      ? `${reqKey}:${selected.time || selected.dateISO || ''}`
+      : null
 
-  // Fetch rich Match Centre detail for BOTH Football & Cricket from ESPN APIs
+  // Fetch rich Match Centre detail for BOTH Football & Cricket
   useEffect(() => {
     if (!reqKey || !selected?.rawId) return undefined
     let alive = true
+    const force = refreshTick !== lastTickRef.current
+    lastTickRef.current = refreshTick
     const req =
       selected.sport === 'cricket'
-        ? fetchCricketDetail(selected.rawId, selected.seriesId)
-        : fetchFootballDetail(selected.rawId, selected.leagueSlug)
+        ? fetchCricketDetail(selected.rawId, selected.seriesId, { force })
+        : fetchFootballDetail(selected.rawId, selected.leagueSlug, { force })
 
     req
       .then((d) => {
@@ -72,24 +80,60 @@ export default function ScoreboardModal() {
     }
   }, [reqKey, selected?.sport, selected?.rawId, selected?.seriesId, selected?.leagueSlug, refreshTick])
 
+  // Fetch pre-match context only when previewKey changes (never synchronously calls setState)
+  const previewSport = selected?.sport || ''
+  const previewHomeId = selected?.teamA?.id || ''
+  const previewAwayId = selected?.teamB?.id || ''
+  const previewHomeName = selected?.teamA?.name || 'Home'
+  const previewAwayName = selected?.teamB?.name || 'Away'
+  const previewTime = selected?.time || ''
+  const previewDateISO = selected?.dateISO || ''
+  const previewLeagueSlug = selected?.leagueSlug || ''
+  const previewSeriesId = selected?.seriesId || ''
+  const previewFormat = selected?.format || ''
+
   useEffect(() => {
-    if (!previewKey || !selected) {
-      setPreviewState({ key: null, data: null, done: false, error: '' })
-      return undefined
-    }
+    if (!previewKey) return undefined
     let alive = true
-    setPreviewState({ key: previewKey, data: null, done: false, error: '' })
-    fetchMatchPreview(selected)
+    fetchMatchPreview({
+      sport: previewSport,
+      teamA: { id: previewHomeId, name: previewHomeName },
+      teamB: { id: previewAwayId, name: previewAwayName },
+      time: previewTime,
+      dateISO: previewDateISO,
+      leagueSlug: previewLeagueSlug,
+      seriesId: previewSeriesId,
+      format: previewFormat,
+    })
       .then((data) => {
         if (alive) setPreviewState({ key: previewKey, data, done: true, error: '' })
       })
       .catch((error) => {
-        if (alive) setPreviewState({ key: previewKey, data: null, done: true, error: error?.message || 'Match context unavailable right now.' })
+        if (alive) {
+          setPreviewState({
+            key: previewKey,
+            data: null,
+            done: true,
+            error: error?.message || 'Match context unavailable right now.',
+          })
+        }
       })
     return () => {
       alive = false
     }
-  }, [previewKey, selected])
+  }, [
+    previewKey,
+    previewSport,
+    previewHomeId,
+    previewAwayId,
+    previewHomeName,
+    previewAwayName,
+    previewTime,
+    previewDateISO,
+    previewLeagueSlug,
+    previewSeriesId,
+    previewFormat,
+  ])
 
   const matched = Boolean(reqKey) && reqState.key === reqKey
   const detail = matched ? reqState.data : null
@@ -135,7 +179,8 @@ export default function ScoreboardModal() {
       }
       await navigator.clipboard.writeText(url)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
+      clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1800)
     } catch { /* ignore */ }
   }
 
@@ -207,6 +252,7 @@ export default function ScoreboardModal() {
 
             {selected.sport === 'football' ? (
               <FootballBoard
+                key={`${selected.id}:${selected.status === 'scheduled' ? 'pre' : 'live'}`}
                 match={selected}
                 detail={detail}
                 loading={loading}
@@ -216,6 +262,7 @@ export default function ScoreboardModal() {
               />
             ) : (
               <CricketBoard
+                key={`${selected.id}:${selected.status === 'scheduled' ? 'pre' : 'live'}`}
                 match={selected}
                 detail={detail}
                 loading={loading}

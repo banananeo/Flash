@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './safeUrl'
+
 export async function fetchMatchPreview(match) {
   const params = new URLSearchParams({
     sport: String(match?.sport || ''),
@@ -13,14 +15,15 @@ export async function fetchMatchPreview(match) {
 
   let response
   try {
-    response = await fetch(`/api/preview?${params}`)
+    response = await fetchWithTimeout(`/api/preview?${params}`, {}, 12000)
   } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Match context timed out')
     if (error instanceof TypeError) throw new Error('Match context unavailable — check your connection')
     throw error
   }
   if (!response.ok) throw new Error(`Match context error ${response.status}`)
 
-  const data = await response.json()
+  const data = await response.json().catch(() => ({}))
   return {
     form: {
       home: Array.isArray(data?.form?.home) ? data.form.home : [],

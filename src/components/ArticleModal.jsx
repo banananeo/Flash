@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { fetchArticleText } from '../lib/article'
+import { safeHttpUrl, safeImageUrl } from '../lib/safeUrl'
 import { categoryLabel } from '../data/mockNews'
 import backIcon from '../assets/icons/back.svg'
 import shareIcon from '../assets/icons/share.svg'
@@ -9,6 +10,7 @@ function formatShortDate(iso) {
   if (!iso) return ''
   try {
     const d = new Date(iso)
+    if (!Number.isFinite(d.getTime())) return ''
     const day = String(d.getDate()).padStart(2, '0')
     const month = d.toLocaleDateString('en-GB', { month: 'long' })
     return `${day} ${month}`
@@ -21,6 +23,10 @@ function formatShortDate(iso) {
 export default function ArticleModal({ article, onClose }) {
   const [reqState, setReqState] = useState({ url: null, data: null, error: null, done: false })
   const [copied, setCopied] = useState(false)
+  const [failedSrcs, setFailedSrcs] = useState({})
+  const copyTimerRef = useRef(null)
+
+  useEffect(() => () => clearTimeout(copyTimerRef.current), [])
 
   useEffect(() => {
     if (!article) return
@@ -31,7 +37,7 @@ export default function ArticleModal({ article, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [article, onClose])
 
-  const canExtract = Boolean(article?.url)
+  const canExtract = Boolean(safeHttpUrl(article?.url))
 
   useEffect(() => {
     const url = canExtract ? article?.url : null
@@ -55,7 +61,7 @@ export default function ArticleModal({ article, onClose }) {
 
   const handleShare = async () => {
     if (!article) return
-    const shareUrl = article.url || window.location.href
+    const shareUrl = safeHttpUrl(article.url) || window.location.href
     try {
       if (navigator.share) {
         await navigator.share({ title: article.title, url: shareUrl })
@@ -63,9 +69,19 @@ export default function ArticleModal({ article, onClose }) {
       }
       await navigator.clipboard.writeText(shareUrl)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1800)
+      clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1800)
     } catch { /* ignore */ }
   }
+
+  const primaryImg = safeImageUrl(data?.image)
+  const fallbackImg = safeImageUrl(article?.image)
+  const heroImage =
+    primaryImg && !failedSrcs[primaryImg]
+      ? primaryImg
+      : fallbackImg && !failedSrcs[fallbackImg]
+        ? fallbackImg
+        : null
 
   const paragraphs = Array.isArray(data?.paragraphs) ? data.paragraphs : []
   const lead = paragraphs[0] || article?.summary || ''
@@ -91,7 +107,7 @@ export default function ArticleModal({ article, onClose }) {
                 type="button"
                 onClick={onClose}
                 aria-label="Back to briefing"
-                className="grid h-9 w-9 -ml-2 place-items-center rounded-full transition-colors hover:bg-sage"
+                className="-ml-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
               >
                 <img src={backIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
               </button>
@@ -104,7 +120,7 @@ export default function ArticleModal({ article, onClose }) {
                 type="button"
                 onClick={handleShare}
                 aria-label="Share story"
-                className="grid h-9 w-9 -mr-2 place-items-center rounded-full transition-colors hover:bg-sage"
+                className="-mr-2 grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage"
               >
                 <img src={shareIcon} alt="" width={22} height={22} className="h-[22px] w-[22px] object-contain" />
               </button>
@@ -138,11 +154,17 @@ export default function ArticleModal({ article, onClose }) {
               {article.readTime ? `  ·  ${article.readTime}` : ''}
             </p>
 
-            {(data?.image || article.image) && (
+            {heroImage && (
               <figure className="mt-6">
                 <img
-                  src={data?.image || article.image}
+                  src={heroImage}
                   alt={article.title}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  onError={() =>
+                    setFailedSrcs((prev) => ({ ...prev, [heroImage]: true }))
+                  }
                   className="h-[210px] w-full rounded-[16px] bg-sage object-cover sm:h-[320px]"
                 />
                 <figcaption className="mt-2 text-[10px] font-medium text-muted">

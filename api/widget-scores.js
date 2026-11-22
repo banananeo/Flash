@@ -5,6 +5,7 @@
 // Response: { live, source, match: {sport,league,teamA,teamB,minute,status,deepLink} | null, updatedAt }
 import { fetchEspnLiveMatches } from './_cricket.js';
 import { fetchEspnFootballMatches } from './_football.js';
+import { applyApiSecurity } from './_security.js';
 
 async function topFootballLive() {
   try {
@@ -45,12 +46,11 @@ async function topCricketLive() {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (applyApiSecurity(req, res, { allowCrossOrigin: true })) return;
 
   const url = new URL(req.url || '/api/widget-scores', 'http://localhost');
-  const want = String(req.query?.sport || url.searchParams.get('sport') || 'auto').toLowerCase();
+  const rawWant = String(req.query?.sport || url.searchParams.get('sport') || 'auto').toLowerCase();
+  const want = ['auto', 'football', 'cricket'].includes(rawWant) ? rawWant : 'auto';
 
   const jobs = [];
   if (want === 'auto' || want === 'football') jobs.push(topFootballLive());

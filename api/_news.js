@@ -10,7 +10,7 @@
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 7000;
 
 export const BBC_SECTION = {
   all: '',
@@ -104,7 +104,7 @@ export function decodeEntities(s) {
   return String(s || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, code) => {
     if (code[0] === '#') {
       const n = code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+      return Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
     }
     return ENTITIES[code.toLowerCase()] ?? m;
   });
@@ -168,12 +168,25 @@ function toIso(d) {
 function cleanArticleUrl(link) {
   try {
     const u = new URL(link);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
     u.searchParams.delete('at_medium');
     u.searchParams.delete('at_campaign');
     u.hash = '';
     return u.toString();
   } catch {
-    return link;
+    return '';
+  }
+}
+
+function cleanImageUrl(raw) {
+  if (!raw) return null;
+  try {
+    const u = new URL(String(raw).trim());
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.protocol === 'http:') u.protocol = 'https:';
+    return u.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -182,7 +195,8 @@ function normalizeRssFeedItems(xml, sourceName, sourceHome) {
     .filter((it) => it.title && it.link)
     .map((it) => {
       const url = cleanArticleUrl(it.link);
-      let image = it.thumbnail || null;
+      if (!url) return null;
+      let image = cleanImageUrl(it.thumbnail);
       if (image && image.includes('ichef.bbci.co.uk')) {
         image = image.replace('/standard/240/', '/standard/800/');
       }
@@ -196,7 +210,7 @@ function normalizeRssFeedItems(xml, sourceName, sourceHome) {
         source: { name: sourceName, url: sourceHome },
       };
     })
-    .filter((a) => !/\/(live|videos|audio)\//i.test(a.url));
+    .filter((a) => a && !/\/(live|videos|audio)\//i.test(a.url));
 }
 
 // ---------- India Regional Multi-Source Fetcher ----------
@@ -297,18 +311,22 @@ function unwrapBingSearchUrl(rawLink) {
   try {
     const u = new URL(rawLink);
     const embedded = u.searchParams.get('url');
-    if (embedded && /^https?:\/\//i.test(embedded)) return embedded;
+    if (embedded && /^https?:\/\//i.test(embedded)) {
+      const eu = new URL(embedded);
+      if (eu.protocol === 'http:' || eu.protocol === 'https:') return eu.toString();
+    }
+    if (u.protocol === 'http:' || u.protocol === 'https:') return u.toString();
   } catch { /* ignore */ }
-  return rawLink;
+  return '';
 }
 
 function upgradeBingThumb(rawThumb) {
-  if (!rawThumb) return null;
-  const httpsUrl = String(rawThumb).replace(/^http:\/\//i, 'https://');
-  if (httpsUrl.includes('bing.com/th?')) {
-    return `${httpsUrl}&w=800&h=500&c=7`;
+  const safe = cleanImageUrl(rawThumb);
+  if (!safe) return null;
+  if (safe.includes('bing.com/th?')) {
+    return `${safe}&w=800&h=500&c=7`;
   }
-  return httpsUrl;
+  return safe;
 }
 
 export async function searchNewsArticles(q, max = 10, region = 'in') {

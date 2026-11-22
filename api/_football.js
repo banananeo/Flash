@@ -139,7 +139,7 @@ export function sanitizeDateParam(raw) {
   return s;
 }
 
-export async function fetchJson(url, { timeoutMs = 10000, retries = 1 } = {}) {
+export async function fetchJson(url, { timeoutMs = 6500, retries = 1 } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctl = new AbortController();
@@ -321,13 +321,13 @@ export async function fetchEspnFootballMatches(rawDate = '', options = {}) {
   const extraLeagues = includeUpcoming ? ['ita.1', 'ger.1', 'fra.1', 'ind.1', 'bra.1'] : [];
 
   const tasks = [
-    fetchJson(espnSoccerHeaderUrl(date), { timeoutMs: 10000, retries: 1 }),
-    fetchJson(espnSoccerAllUrl(date), { timeoutMs: 8000, retries: 0 }),
+    fetchJson(espnSoccerHeaderUrl(date), { timeoutMs: 6500, retries: 1 }),
+    fetchJson(espnSoccerAllUrl(date), { timeoutMs: 5500, retries: 0 }),
   ];
   if (includeUpcoming) {
-    tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam), { timeoutMs: 9000, retries: 0 }));
+    tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam), { timeoutMs: 6000, retries: 0 }));
     for (const slug of extraLeagues) {
-      tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam, slug), { timeoutMs: 8000, retries: 0 }));
+      tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam, slug), { timeoutMs: 5500, retries: 0 }));
     }
   }
 
@@ -381,13 +381,13 @@ export function parseFootballIdAndLeague(rawIdInput, rawLeagueInput) {
     rawId = comp[2];
   }
 
-  if (!/^\d+$/.test(rawId)) {
-    const err = new Error('Invalid or missing ?id= numeric ESPN match id');
+  if (!/^\d+$/.test(rawId) || rawId.length > 24) {
+    const err = new Error('Invalid or missing ?id= numeric match id');
     err.status = 400;
     throw err;
   }
-  if (leagueSlug && !/^[a-z0-9._-]+$/i.test(leagueSlug)) {
-    const err = new Error('Invalid ?league= ESPN league slug');
+  if (leagueSlug && (leagueSlug.length > 48 || leagueSlug.includes('..') || !/^[a-z0-9._-]+$/i.test(leagueSlug))) {
+    const err = new Error('Invalid ?league= league slug');
     err.status = 400;
     throw err;
   }
@@ -689,7 +689,14 @@ export async function fetchEspnFootballPreview({
   const homeTeamId = String(homeId || '').trim();
   const awayTeamId = String(awayId || '').trim();
   const targetMs = Date.parse(date);
-  if (!/^[a-z0-9._-]+$/i.test(league) || !/^\d+$/.test(homeTeamId) || !/^\d+$/.test(awayTeamId)) {
+  if (
+    !league ||
+    league.length > 48 ||
+    league.includes('..') ||
+    !/^[a-z0-9._-]+$/i.test(league) ||
+    !/^\d{1,24}$/.test(homeTeamId) ||
+    !/^\d{1,24}$/.test(awayTeamId)
+  ) {
     return { form: { home: [], away: [] }, headToHead: [], standings: null };
   }
 
@@ -697,9 +704,9 @@ export async function fetchEspnFootballPreview({
     `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/teams/${encodeURIComponent(id)}/schedule`;
   const standingsUrl = `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/standings`;
   const [homeScheduleResult, awayScheduleResult, standingsResult] = await Promise.allSettled([
-    fetchJson(teamScheduleUrl(homeTeamId), { timeoutMs: 9000, retries: 0 }),
-    fetchJson(teamScheduleUrl(awayTeamId), { timeoutMs: 9000, retries: 0 }),
-    fetchJson(standingsUrl, { timeoutMs: 9000, retries: 0 }),
+    fetchJson(teamScheduleUrl(homeTeamId), { timeoutMs: 6500, retries: 0 }),
+    fetchJson(teamScheduleUrl(awayTeamId), { timeoutMs: 6500, retries: 0 }),
+    fetchJson(standingsUrl, { timeoutMs: 6500, retries: 0 }),
   ]);
 
   const scheduleEvents = new Map();
