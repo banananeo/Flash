@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import SplashScreen from './components/SplashScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 import { TopBar, BottomNav } from './components/AppShell'
@@ -99,6 +100,7 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
         <InstallPrompt />
+        <SpeedInsights />
       </div>
     </ErrorBoundary>
   )
