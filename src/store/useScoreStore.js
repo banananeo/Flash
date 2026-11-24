@@ -26,10 +26,9 @@ const initialView = (() => {
   try {
     const p = new URLSearchParams(window.location.search)
     const v = p.get('view')
-    if (v === 'scores' || p.get('scores') === '1') return 'scores'
     if (v === 'f1') return 'f1'
   } catch { /* ignore */ }
-  return 'news'
+  return 'scores'
 })()
 
 const initialSport = (() => {
@@ -197,10 +196,11 @@ export const POPULAR_CRICKET_TEAMS = [
 export const useScoreStore = create((set, get) => ({
   view: initialView,
   setView: (view) => {
-    set({ view })
+    const nextView = view === 'f1' ? 'f1' : 'scores'
+    set({ view: nextView })
     try {
       const params = new URLSearchParams(window.location.search)
-      if (view === 'scores' || view === 'f1') params.set('view', view)
+      if (nextView === 'f1') params.set('view', 'f1')
       else params.delete('view')
       const qs = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))

@@ -330,7 +330,7 @@ export default defineConfig(() => {
         manifest: {
           name: 'flash — Less noise. More signal.',
           short_name: 'flash',
-          description: 'An editorial pulse for news, live football, cricket and Formula 1.',
+          description: 'Live football, cricket scores and Formula 1 telemetry.',
           theme_color: '#FFFFFF',
           background_color: '#FFFFFF',
           display: 'standalone',
@@ -345,8 +345,7 @@ export default defineConfig(() => {
             { src: 'logo-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
           ],
           shortcuts: [
-            { name: 'Live Scores', short_name: 'Scores', url: '/?view=scores', description: 'Jump straight to live scores' },
-            { name: 'Your Briefing', short_name: 'News', url: '/', description: 'Read today’s briefing' },
+            { name: 'Live Scores', short_name: 'Scores', url: '/', description: 'Jump straight to live scores' },
             { name: 'Formula 1', short_name: 'F1', url: '/?view=f1', description: 'Championship standings & calendar' },
           ],
         },
