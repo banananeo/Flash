@@ -113,7 +113,7 @@ export default function ArticleModal({ article, onClose }) {
               </button>
 
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
-                THE DAILY READ
+                PADDOCK INTEL
               </span>
 
               <button
@@ -186,6 +186,29 @@ export default function ArticleModal({ article, onClose }) {
               <p className="mt-6 text-[18px] font-semibold leading-[1.45] text-ink">
                 {lead}
               </p>
+            )}
+
+            {Array.isArray(article.bullets) && article.bullets.length > 0 && (
+              <div className="mt-6 space-y-3 rounded-[18px] border border-hairline bg-white p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
+                  INSIDER BREAKDOWN
+                </p>
+                {article.fromTeam && article.toTeam && (
+                  <p className="text-[14px] font-bold text-ink">
+                    {article.subject ? `${article.subject}: ` : ''}
+                    {article.fromTeam} → {article.toTeam}
+                    {article.dealTag ? ` (${article.dealTag})` : ''}
+                  </p>
+                )}
+                <ul className="space-y-2.5 text-[15px] leading-relaxed text-ink">
+                  {article.bullets.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2.5">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-pulse" />
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             {!loading && restParas.length > 0 && (

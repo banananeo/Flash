@@ -64,7 +64,69 @@ export const INDIA_FEEDS = {
   ],
 };
 
-export const NEWS_CATEGORIES = new Set([...Object.keys(BBC_SECTION), 'sports']);
+export const NEWS_CATEGORIES = new Set([
+  ...Object.keys(BBC_SECTION),
+  'sports',
+  'paddock',
+  'football',
+  'f1',
+  'cricket',
+]);
+
+// Dedicated Pure Sports & Motorsport feeds for The Paddock & Locker Room
+export const PADDOCK_FEEDS = {
+  football: [
+    { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', name: 'BBC Football', home: 'https://www.bbc.co.uk/sport/football', sport: 'football' },
+    { url: 'https://www.thehindu.com/sport/football/feeder/default.rss', name: 'The Hindu Football', home: 'https://www.thehindu.com/sport/football', sport: 'football' },
+  ],
+  f1: [
+    { url: 'https://feeds.bbci.co.uk/sport/formula1/rss.xml', name: 'BBC F1', home: 'https://www.bbc.co.uk/sport/formula1', sport: 'f1' },
+    { url: 'https://www.thehindu.com/sport/motorsport/feeder/default.rss', name: 'Paddock Wire', home: 'https://www.thehindu.com/sport/motorsport', sport: 'f1' },
+  ],
+  cricket: [
+    { url: 'https://feeds.bbci.co.uk/sport/cricket/rss.xml', name: 'BBC Cricket', home: 'https://www.bbc.co.uk/sport/cricket', sport: 'cricket' },
+    { url: 'https://www.thehindu.com/sport/cricket/feeder/default.rss', name: 'The Hindu Cricket', home: 'https://www.thehindu.com/sport/cricket', sport: 'cricket' },
+  ],
+};
+
+export function classifyPaddockArticle(article, hintSport = '') {
+  const text = `${article?.title || ''} ${article?.description || ''}`.toLowerCase();
+
+  let sportTag = hintSport;
+  if (!sportTag || sportTag === 'all' || sportTag === 'paddock' || sportTag === 'sports') {
+    if (/\b(f1|formula 1|grand prix|verstappen|hamilton|norris|leclerc|antonelli|russell|piastri|ferrari|mclaren|mercedes|red bull|pit wall|qualifying|paddock|fia|alonso|sainz)\b/i.test(text)) {
+      sportTag = 'f1';
+    } else if (/\b(cricket|ipl|bcci|test match|odi|t20|wicket|innings|kohli|rohit|bumrah|cummins|gill|jaiswal|stump|century|over|bowler|batter)\b/i.test(text)) {
+      sportTag = 'cricket';
+    } else {
+      sportTag = 'football';
+    }
+  }
+
+  let radarTier = 'heating-up';
+  let reliabilityPct = 82;
+
+  if (/\b(official|confirmed|signs|signed|agrees|deal done|appointed|extends|announced|clinches|wins|pole|champion|record|completes)\b/i.test(text)) {
+    radarTier = 'here-we-go';
+    reliabilityPct = 96;
+  } else if (/\b(talks|bid|target|closing in|set to|shortlist|transfer|contract|upgrade|battle|showdown|move|offer|negotiation)\b/i.test(text)) {
+    radarTier = 'heating-up';
+    reliabilityPct = 84;
+  } else if (/\b(deny|denied|rejects|rubbished|false|no truth|unlikely|rules out|dismisses)\b/i.test(text)) {
+    radarTier = 'cap';
+    reliabilityPct = 18;
+  } else if (/\b(linked|monitoring|eyeing|interest|rumour|rumor|could|considering|scout|watch|future)\b/i.test(text)) {
+    radarTier = 'radar';
+    reliabilityPct = 64;
+  }
+
+  return {
+    ...article,
+    sportTag,
+    radarTier,
+    reliabilityPct,
+  };
+}
 
 export function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -291,40 +353,102 @@ export async function fetchBbc(pillId = 'all', max = 10) {
   return articles.slice(0, max);
 }
 
-// ---------- ESPN (sports tab) ----------
+// ---------- ESPN & Pure Sports Paddock Aggregator ----------
 
-function mapEspnHeadline(h) {
+function mapEspnHeadline(h, sportHint = '') {
   const url = h?.links?.web?.href;
   if (!h?.headline || !url) return null;
-  return {
-    id: `espn-${h.id || url}`,
-    title: h.headline,
-    description: h.description || '',
-    url,
-    image: h.images?.find((img) => img?.url)?.url || null,
-    publishedAt: toIso(h.published || h.lastModified),
-    source: { name: 'ESPN', url: 'https://www.espn.com' },
-  };
+  return classifyPaddockArticle(
+    {
+      id: `espn-${h.id || url}`,
+      title: h.headline,
+      description: h.description || '',
+      url,
+      image: h.images?.find((img) => img?.url)?.url || null,
+      publishedAt: toIso(h.published || h.lastModified),
+      source: { name: 'ESPN', url: 'https://www.espn.com' },
+    },
+    sportHint,
+  );
 }
 
-export async function fetchEspnSportsNews(max = 10) {
-  const sports = ['cricket', 'soccer'];
-  const results = await Promise.allSettled(
-    sports.map((s) =>
-      fetchText(`https://now.core.api.espn.com/v1/sports/news?sport=${s}&limit=${max}`, 'application/json').then(
-        (txt) => JSON.parse(txt)?.headlines || [],
-      ),
-    ),
-  );
-  const ok = results.filter((r) => r.status === 'fulfilled');
-  if (!ok.length) throw results[0].reason;
+export async function fetchEspnSportsNews(max = 10, sportFilter = 'all') {
+  const jobs = [];
+  if (sportFilter === 'all' || sportFilter === 'football') {
+    jobs.push(
+      fetchText(`https://now.core.api.espn.com/v1/sports/news?sport=soccer&limit=${max}`, 'application/json')
+        .then((txt) => (JSON.parse(txt)?.headlines || []).map((h) => mapEspnHeadline(h, 'football')))
+        .catch(() => []),
+    );
+  }
+  if (sportFilter === 'all' || sportFilter === 'cricket') {
+    jobs.push(
+      fetchText(`https://now.core.api.espn.com/v1/sports/news?sport=cricket&limit=${max}`, 'application/json')
+        .then((txt) => (JSON.parse(txt)?.headlines || []).map((h) => mapEspnHeadline(h, 'cricket')))
+        .catch(() => []),
+    );
+  }
+  if (sportFilter === 'all' || sportFilter === 'f1') {
+    jobs.push(
+      fetchText(`https://site.api.espn.com/apis/site/v2/sports/racing/f1/news?limit=${max}`, 'application/json')
+        .then((txt) => (JSON.parse(txt)?.articles || []).map((h) => mapEspnHeadline(h, 'f1')))
+        .catch(() => []),
+    );
+  }
+
+  const lists = await Promise.all(jobs);
   const seen = new Set();
-  return ok
-    .flatMap((r) => r.value)
-    .map(mapEspnHeadline)
+  return lists
+    .flat()
     .filter((a) => a && !seen.has(a.id) && seen.add(a.id))
     .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
     .slice(0, max);
+}
+
+export async function fetchPaddockNews(sportFilter = 'all', max = 12) {
+  const sport = ['football', 'f1', 'cricket'].includes(sportFilter) ? sportFilter : 'all';
+  const rssTargets =
+    sport === 'all'
+      ? [...PADDOCK_FEEDS.football, ...PADDOCK_FEEDS.f1, ...PADDOCK_FEEDS.cricket]
+      : PADDOCK_FEEDS[sport] || [];
+
+  const tasks = [
+    fetchEspnSportsNews(max, sport),
+    ...rssTargets.map((f) =>
+      fetchText(f.url, 'application/rss+xml, application/xml, text/xml')
+        .then((xml) =>
+          normalizeRssFeedItems(xml, f.name, f.home).map((item) =>
+            classifyPaddockArticle(item, f.sport),
+          ),
+        )
+        .catch(() => []),
+    ),
+  ];
+
+  const lists = (await Promise.all(tasks)).filter((l) => Array.isArray(l) && l.length > 0);
+  if (!lists.length) throw httpError(502, 'Sports paddock feeds unreachable');
+
+  // Round-robin interleave across ESPN + BBC Sport + Paddock feeds for balanced Football/F1/Cricket variety
+  const merged = [];
+  const seenUrl = new Set();
+  const seenTitle = new Set();
+  const maxLen = Math.max(...lists.map((l) => l.length), 0);
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const list of lists) {
+      const item = list[i];
+      if (!item) continue;
+      const tKey = item.title.toLowerCase().slice(0, 60);
+      if (seenUrl.has(item.url) || seenTitle.has(tKey)) continue;
+      seenUrl.add(item.url);
+      seenTitle.add(tKey);
+      merged.push(classifyPaddockArticle(item, item.sportTag));
+    }
+  }
+
+  const withImg = merged.filter((a) => Boolean(a.image));
+  const pool = withImg.length >= Math.min(6, max) ? [...withImg, ...merged.filter((a) => !a.image)] : merged;
+  return pool.slice(0, max);
 }
 
 // ---------- Direct-URL Search (Bing News RSS with unwrapped publisher URLs + images + summaries) ----------
@@ -445,17 +569,23 @@ export async function fetchEspnStory(url) {
 
 // ---------- entry point ----------
 
-export async function getNews({ category = 'all', q = '', max = 10, region = 'in' } = {}) {
-  const count = Math.min(20, Math.max(1, parseInt(max, 10) || 10));
+export async function getNews({ category = 'all', q = '', max = 12, region = 'in' } = {}) {
+  const count = Math.min(20, Math.max(1, parseInt(max, 10) || 12));
   const query = String(q || '').trim().slice(0, 120);
   const reg = String(region || 'in').toLowerCase() === 'global' ? 'global' : 'in';
 
-  if (query) return searchNewsArticles(query, count, reg);
+  if (query) {
+    const items = await searchNewsArticles(query, count, reg);
+    return items.map((it) => classifyPaddockArticle(it));
+  }
   const cat = NEWS_CATEGORIES.has(category) ? category : 'all';
 
+  if (['all', 'paddock', 'sports', 'football', 'f1', 'cricket'].includes(cat)) {
+    const sportKey = ['football', 'f1', 'cricket'].includes(cat) ? cat : 'all';
+    return fetchPaddockNews(sportKey, count);
+  }
   if (cat === 'india' || reg === 'in') {
     return fetchIndiaNews(cat, count);
   }
-  if (cat === 'sports') return fetchEspnSportsNews(count);
   return fetchBbc(cat, count);
 }

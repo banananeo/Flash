@@ -16,18 +16,23 @@ function estimateReadTime(text) {
 function mapArticle(a, pillId, i) {
   const raw = String(a.description || '').trim()
   const summary = raw ? raw.slice(0, 260) : a.title
+  const sportTag = a.sportTag || (['football', 'f1', 'cricket'].includes(pillId) ? pillId : 'football')
   return {
     id: a.id || a.url || `${pillId}-${i}`,
-    category: pillId,
+    category: sportTag,
+    sport: sportTag,
+    tier: a.radarTier || 'heating-up',
+    reliabilityPct: a.reliabilityPct || 84,
     title: (a.title || 'Untitled').trim().slice(0, 140),
     summary,
-    source: a.source?.name || a.source?.url || 'Flash Edit',
+    source: a.source?.name || a.source?.url || 'Paddock Wire',
     sourceUrl: safeHttpUrl(a.source?.url),
     url: safeHttpUrl(a.url),
     publishedAt: a.publishedAt || new Date().toISOString(),
     readTime: estimateReadTime(a.description),
-    image: safeImageUrl(a.image) || fallbackImg(a.id || a.title || `news-${i}`),
+    image: safeImageUrl(a.image) || fallbackImg(a.id || a.title || `paddock-${i}`),
     external: Boolean(a.external),
+    isLiveFeed: true,
   }
 }
 
@@ -41,12 +46,12 @@ function friendlyNetworkError(e) {
   return e
 }
 
-export async function fetchNews(pillId = 'all', max = 10, query = '', region = 'in') {
+export async function fetchNews(pillId = 'all', max = 12, query = '', region = 'in') {
   const q = String(query || '').trim().slice(0, 120)
   const reg = String(region || 'in').toLowerCase() === 'global' ? 'global' : 'in'
-  const count = Math.min(20, Math.max(1, parseInt(max, 10) || 10))
+  const count = Math.min(20, Math.max(1, parseInt(max, 10) || 12))
 
-  const cacheKey = q ? `news-q-v2-${reg}-${q.toLowerCase()}` : `news-cache-v2-${reg}-${pillId}`
+  const cacheKey = q ? `paddock-q-v3-${reg}-${q.toLowerCase()}` : `paddock-cache-v3-${reg}-${pillId}`
   try {
     const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
     if (cached && Date.now() - cached.ts < CACHE_MS && cached.articles?.length) {

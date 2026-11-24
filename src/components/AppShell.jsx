@@ -12,7 +12,7 @@ import scoresIcon from '../assets/icons/scores.svg'
 import f1Icon from '../assets/icons/f1.svg'
 
 const NAV_ITEMS = [
-  { id: 'news', mobileLabel: 'News', desktopLabel: 'News', icon: newsIcon },
+  { id: 'news', mobileLabel: 'Paddock', desktopLabel: 'Paddock', icon: newsIcon },
   { id: 'scores', mobileLabel: 'Scores', desktopLabel: 'Live scores', icon: scoresIcon },
   { id: 'f1', mobileLabel: 'Formula 1', desktopLabel: 'Formula 1', icon: f1Icon },
 ]
@@ -88,9 +88,9 @@ export function TopBar() {
               type="search"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder="Search Flash"
-              aria-label="Search Flash"
-              className="h-[38px] w-[220px] rounded-full border border-hairline bg-white px-4 pr-8 text-[13px] font-medium text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-pulse/30"
+              placeholder="Search transfers, radio, debates…"
+              aria-label="Search Paddock"
+              className="h-[38px] w-[240px] rounded-full border border-hairline bg-white px-4 pr-8 text-[13px] font-medium text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-pulse/30"
             />
             {draft && (
               <button
@@ -166,7 +166,7 @@ export function TopBar() {
                 autoFocus
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Search headlines…"
+                placeholder="Search transfers, radio, debates…"
                 className="h-10 flex-1 rounded-full border border-hairline bg-white px-4 text-[14px] font-medium text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-pulse/30"
               />
               {draft && (

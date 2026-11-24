@@ -82,7 +82,7 @@ export default function MorningReminder() {
             >
               <div className="flex items-center justify-between">
                 <span className="rounded-full bg-pulse px-3 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-ink">
-                  MORNING BRIEF
+                  PADDOCK DROP
                 </span>
                 <button
                   type="button"
@@ -95,10 +95,10 @@ export default function MorningReminder() {
               </div>
 
               <p className="mt-4 text-[24px] font-semibold leading-tight text-ink">
-                Your morning, sorted.
+                The Paddock is live.
               </p>
               <p className="mt-1.5 text-[13px] text-muted">
-                {(cards || []).length} stories in today’s edit · less noise, more signal.
+                {(cards || []).length} transfer radar drops, pit-wall radio clips & fan debates ready.
               </p>
 
               <button
@@ -109,7 +109,7 @@ export default function MorningReminder() {
                 }}
                 className="mt-5 h-11 w-full rounded-full bg-pulse text-[13px] font-bold text-ink transition-opacity hover:opacity-90"
               >
-                Open briefing
+                Enter The Paddock
               </button>
 
               <div className="mt-2.5 grid grid-cols-2 gap-2">
