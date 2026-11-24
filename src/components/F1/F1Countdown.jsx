@@ -111,11 +111,7 @@ export default function F1Countdown({ nextRace, schedule, season }) {
           </h2>
         </div>
 
-        {flag && (
-          <span className="shrink-0 text-[28px] leading-none" aria-hidden="true">
-            {flag}
-          </span>
-        )}
+
       </div>
 
       {nextRace && <div className="mt-6 flex items-end justify-between gap-4">
@@ -126,9 +122,7 @@ export default function F1Countdown({ nextRace, schedule, season }) {
           <p className="font-display text-[15px] font-bold text-brand-strong">
             {fmtDateUTC(nextRace.dateUTC)}
           </p>
-          <p className="mt-0.5 text-[11px] font-bold tracking-[0.04em] text-brand-strong">
-            {fmtTimeUTC(nextRace.dateUTC)}
-          </p>
+
         </div>
       </div>}
 

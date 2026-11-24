@@ -136,8 +136,8 @@ export default function ScoreboardModal() {
   ])
 
   const matched = Boolean(reqKey) && reqState.key === reqKey
-  const detail = matched ? reqState.data : null
-  const loading = Boolean(reqKey) && (!matched || !reqState.done)
+  const detail = selected?.detail || (matched ? reqState.data : null)
+  const loading = !selected?.detail && Boolean(reqKey) && (!matched || !reqState.done)
   const previewMatched = Boolean(previewKey) && previewState.key === previewKey
   const preview = previewMatched ? previewState.data : null
   const previewLoading = Boolean(previewKey) && (!previewMatched || !previewState.done)
@@ -213,20 +213,22 @@ export default function ScoreboardModal() {
               </button>
 
               <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
-                MATCH CENTRE
+                {selected?.isIplArchive ? `IPL ${selected.season || ''} ARCHIVE` : 'MATCH CENTRE'}
               </span>
 
               <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => refreshMatch(selected)}
-                  disabled={isRefreshing}
-                  title="Refresh live score"
-                  aria-label="Refresh live score"
-                  className="grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage disabled:opacity-60"
-                >
-                  <RefreshCw size={17} className={isRefreshing ? 'animate-spin text-brand-strong' : 'text-ink'} />
-                </button>
+                {!selected?.isIplArchive && (
+                  <button
+                    type="button"
+                    onClick={() => refreshMatch(selected)}
+                    disabled={isRefreshing}
+                    title="Refresh live score"
+                    aria-label="Refresh live score"
+                    className="grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-sage disabled:opacity-60"
+                  >
+                    <RefreshCw size={17} className={isRefreshing ? 'animate-spin text-brand-strong' : 'text-ink'} />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleShare}

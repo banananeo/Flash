@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Trophy } from 'lucide-react'
 import MatchCard from './MatchCard'
 import ScorePreferencesBar from './ScorePreferencesBar'
 import { fetchCricketDetail } from '../../lib/cricket'
+
+const IPLSection = lazy(() => import('./IPLSection'))
 import {
   useScoreStore,
   isFavMatch,
@@ -316,6 +318,7 @@ export default function LiveScoresSection() {
   const refreshTick = useScoreStore((s) => s.refreshTick)
 
   const [featuredDetailState, setFeaturedDetailState] = useState({ key: null, data: null })
+  const [cricketMode, setCricketMode] = useState('live') // 'live' | 'ipl'
 
   useEffect(() => {
     fetchScores(sport, selectedDate)
@@ -350,32 +353,22 @@ export default function LiveScoresSection() {
   )
 
   // Main matches list for current tab & league filter
-  const { allMatches, isShowingUpcomingLookahead } = useMemo(() => {
+  const allMatches = useMemo(() => {
     if (sport === 'following') {
-      return { allMatches: personalLiveOrNext, isShowingUpcomingLookahead: true }
+      return personalLiveOrNext
     }
 
-    let pool = sportPool
+    const isToday = selectedDate === todayISO()
+    let pool = sportPool.filter((m) => {
+      if (isToday && m.status === 'live') return true
+      return !m.dateISO || m.dateISO === selectedDate
+    })
+
     if (activeLeague && activeLeague !== 'all') {
       pool = pool.filter((m) => isFavLeagueMatch(m, [activeLeague]))
     }
 
-    // If viewing today without a specific league filter, prefer today's/live matches first;
-    // if a chosen league has no match today, automatically surface its upcoming next matches!
-    if (selectedDate === todayISO()) {
-      const todayOrLive = pool.filter(
-        (m) => m.status === 'live' || !m.dateISO || m.dateISO === todayISO(),
-      )
-      if (todayOrLive.length > 0 && activeLeague === 'all') {
-        return { allMatches: todayOrLive, isShowingUpcomingLookahead: false }
-      }
-      return {
-        allMatches: pool,
-        isShowingUpcomingLookahead: todayOrLive.length === 0 && pool.length > 0,
-      }
-    }
-
-    return { allMatches: pool, isShowingUpcomingLookahead: false }
+    return pool
   }, [sport, sportPool, activeLeague, selectedDate, personalLiveOrNext])
 
   const featured =
@@ -460,11 +453,53 @@ export default function LiveScoresSection() {
         })}
       </div>
 
-      {/* League Pills & "Choose Leagues & Teams" Picker */}
-      <ScorePreferencesBar defaultOpen={sport === 'following' && !hasSelections} />
+      {/* Cricket Mode Toggle: Live & Fixtures | IPL Hub */}
+      {sport === 'cricket' && (
+        <div className="mt-4 inline-flex rounded-full bg-sage p-1">
+          <button
+            type="button"
+            onClick={() => setCricketMode('live')}
+            className={`rounded-full px-4 py-1.5 text-[12px] transition-colors ${
+              cricketMode === 'live'
+                ? 'bg-white font-bold text-ink shadow-sm'
+                : 'font-medium text-muted hover:text-ink'
+            }`}
+          >
+            Live & Fixtures
+          </button>
+          <button
+            type="button"
+            onClick={() => setCricketMode('ipl')}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] transition-colors ${
+              cricketMode === 'ipl'
+                ? 'bg-white font-bold text-ink shadow-sm'
+                : 'font-medium text-muted hover:text-ink'
+            }`}
+          >
+            <Trophy size={13} className="text-brand-strong" />
+            <span>IPL Hub</span>
+          </button>
+        </div>
+      )}
 
-      {/* Date Switcher */}
-      <div className="mt-5 flex items-center justify-between gap-2">
+      {sport === 'cricket' && cricketMode === 'ipl' ? (
+        <Suspense
+          fallback={
+            <div className="mt-5 space-y-4">
+              <div className="h-[220px] animate-pulse rounded-[22px] bg-sage" />
+              <div className="h-[110px] animate-pulse rounded-[16px] bg-white" />
+            </div>
+          }
+        >
+          <IPLSection />
+        </Suspense>
+      ) : (
+        <>
+          {/* League Pills & "Choose Leagues & Teams" Picker */}
+          <ScorePreferencesBar defaultOpen={sport === 'following' && !hasSelections} />
+
+          {/* Date Switcher */}
+          <div className="mt-5 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => setSelectedDate(prevDate)}
@@ -516,41 +551,6 @@ export default function LiveScoresSection() {
         </div>
       )}
 
-      {/* Dedicated Spotlight: Your Chosen Leagues & Teams (Live Score or Next Match) */}
-      {sport !== 'following' && activeLeague === 'all' && personalLiveOrNext.length > 0 && (
-        <div className="mt-6 rounded-[20px] bg-sage/80 p-4 sm:p-5">
-          <div className="mb-3 flex items-baseline justify-between gap-2">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
-                YOUR LEAGUES & TEAMS
-              </p>
-              <h2 className="text-[18px] font-semibold text-ink">
-                Live scores & next matches
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSport('following')}
-              className="text-[12px] font-semibold text-brand-strong hover:underline"
-            >
-              View all ({personalLiveOrNext.length}) →
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {personalLiveOrNext.slice(0, 4).map((m) => (
-              <MatchCard
-                key={`pick-${m.id}`}
-                match={m}
-                showLeagueBadge
-                isFav={isFavMatch(m, favTeams)}
-                onToggleFav={() => toggleMatchFav(m)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
       <div className="mt-5">
         {status === 'loading' && !allMatches.length ? (
@@ -584,7 +584,7 @@ export default function LiveScoresSection() {
             </p>
             <p className="mt-1 text-[13px] text-muted">
               {activeLeague !== 'all'
-                ? 'Try switching back to All Leagues or another day.'
+                ? 'Try switching back to All or another day.'
                 : 'Try switching to an adjacent day above.'}
             </p>
             {activeLeague !== 'all' && (
@@ -593,18 +593,12 @@ export default function LiveScoresSection() {
                 onClick={() => setActiveLeague('all')}
                 className="mt-4 rounded-full bg-pulse px-4 py-2 text-[12px] font-bold text-ink"
               >
-                Show all leagues
+                Show all matches
               </button>
             )}
           </div>
         ) : (
           <>
-            {isShowingUpcomingLookahead && (
-              <div className="mb-3 rounded-[14px] bg-sage-leader/70 px-4 py-2 text-[12px] font-semibold text-brand-strong">
-                No match today for {activeLeague !== 'all' ? activeLeague : 'your selection'} — showing next upcoming fixtures.
-              </div>
-            )}
-
             {/* Featured Hero Card */}
             {featured?.sport === 'cricket' ? (
               <>
@@ -661,6 +655,8 @@ export default function LiveScoresSection() {
           </>
         )}
       </div>
+        </>
+      )}
     </section>
   )
 }
