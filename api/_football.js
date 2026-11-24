@@ -2,21 +2,26 @@
 // Leading `_` = not routed by Vercel (same convention as api/_cricket.js).
 // Unauthenticated public JSON feeds — no API key required, no 100 req/day quota.
 
-export const espnSoccerHeaderUrl = (date, leagueSlug = '') => {
+export const espnSoccerHeaderUrl = (date, leagueSlug = '', limit = 300) => {
   const base = 'https://site.web.api.espn.com/apis/v2/scoreboard/header?sport=soccer';
   const lg = leagueSlug ? `&league=${encodeURIComponent(leagueSlug)}` : '';
-  return date ? `${base}${lg}&dates=${encodeURIComponent(date)}` : `${base}${lg}`;
+  const dt = date ? `&dates=${encodeURIComponent(date)}` : '';
+  const lim = limit ? `&limit=${encodeURIComponent(limit)}` : '';
+  return `${base}${lg}${dt}${lim}`;
 };
 
-export const espnSoccerAllUrl = (date) => {
+export const espnSoccerAllUrl = (date, limit = 300) => {
   const base = 'https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard';
-  return date ? `${base}?dates=${encodeURIComponent(date)}` : base;
+  const params = [];
+  if (date) params.push(`dates=${encodeURIComponent(date)}`);
+  if (limit) params.push(`limit=${encodeURIComponent(limit)}`);
+  return params.length ? `${base}?${params.join('&')}` : base;
 };
 
 export const espnSoccerSummaryUrl = (leagueSlug, eventId) =>
   `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(leagueSlug)}/summary?event=${encodeURIComponent(eventId)}`;
 
-// Top leagues fetched across a 7-day window when upcoming=1 so users can always
+// Top leagues fetched across the upcoming window when upcoming=1 so users can always
 // see the live score OR next upcoming match for any major league or club.
 export const CURATED_FOOTBALL_LEAGUES = [
   'eng.1',
@@ -31,24 +36,7 @@ export const CURATED_FOOTBALL_LEAGUES = [
   'bra.1',
 ];
 
-function computeDateRangeParam(baseDateStr = '', daysAhead = 7) {
-  let start = new Date();
-  if (/^\d{8}$/.test(baseDateStr)) {
-    const y = Number(baseDateStr.slice(0, 4));
-    const m = Number(baseDateStr.slice(4, 6)) - 1;
-    const d = Number(baseDateStr.slice(6, 8));
-    start = new Date(Date.UTC(y, m, d));
-  }
-  const fmt = (dt) => {
-    const yyyy = dt.getUTCFullYear();
-    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getUTCDate()).padStart(2, '0');
-    return `${yyyy}${mm}${dd}`;
-  };
-  const end = new Date(start.getTime() + daysAhead * 86400000);
-  return `${fmt(start)}-${fmt(end)}`;
-}
-
+const UEFA_EXTENDED_LEAGUES = new Set(['uefa.champions', 'uefa.europa']);
 const IST_TZ = 'Asia/Kolkata';
 
 function formatIstDateISO(d) {
@@ -58,6 +46,33 @@ function formatIstDateISO(d) {
     month: '2-digit',
     day: '2-digit',
   }).format(d);
+}
+
+function todayIstYmd() {
+  return formatIstDateISO(new Date()).replace(/-/g, '');
+}
+
+function ymdToIso(ymd) {
+  if (!/^\d{8}$/.test(ymd)) return '';
+  return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+}
+
+function shiftYmd(baseDateStr = '', deltaDays = 0) {
+  const clean = /^\d{8}$/.test(baseDateStr) ? baseDateStr : todayIstYmd();
+  const y = Number(clean.slice(0, 4));
+  const m = Number(clean.slice(4, 6)) - 1;
+  const d = Number(clean.slice(6, 8));
+  const dt = new Date(Date.UTC(y, m, d + deltaDays));
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}`;
+}
+
+function computeDateRangeParam(baseDateStr = '', daysAhead = 7) {
+  const startYmd = /^\d{8}$/.test(baseDateStr) ? baseDateStr : todayIstYmd();
+  const endYmd = shiftYmd(startYmd, daysAhead);
+  return `${startYmd}-${endYmd}`;
 }
 
 function formatIstTime(d) {
@@ -139,6 +154,17 @@ export function sanitizeDateParam(raw) {
   return s;
 }
 
+export function sanitizeLeagueParam(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (s.length > 48 || s.includes('..') || !/^[a-z0-9._-]+$/i.test(s)) {
+    const err = new Error('Invalid ?league= league slug');
+    err.status = 400;
+    throw err;
+  }
+  return s;
+}
+
 export async function fetchJson(url, { timeoutMs = 6500, retries = 1 } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -194,28 +220,31 @@ function formatKickoff(isoDate) {
   }
 }
 
-function buildScorersMap(allScoreboardJson) {
+function buildScorersMap(payloads) {
   // eventId -> { [teamId]: ["Saka 12'", "Havertz 54'"] }
   const map = new Map();
-  for (const ev of allScoreboardJson?.events || []) {
-    const id = String(ev?.id || '');
-    const details = ev?.competitions?.[0]?.details || [];
-    if (!id || !details.length) continue;
-    const byTeam = {};
-    for (const d of details) {
-      if (!d?.scoringPlay) continue;
-      const tid = String(d?.team?.id || '');
-      const player =
-        d?.athletesInvolved?.[0]?.shortName ||
-        d?.athletesInvolved?.[0]?.displayName ||
-        '';
-      const min = d?.clock?.displayValue || '';
-      if (!tid || !player) continue;
-      const label = `${player}${min ? ` ${min}` : ''}${d.ownGoal ? ' (OG)' : ''}${d.penaltyKick ? ' (P)' : ''}`;
-      if (!byTeam[tid]) byTeam[tid] = [];
-      byTeam[tid].push(label);
+  const list = Array.isArray(payloads) ? payloads : [payloads];
+  for (const allScoreboardJson of list) {
+    for (const ev of allScoreboardJson?.events || []) {
+      const id = String(ev?.id || '');
+      const details = ev?.competitions?.[0]?.details || [];
+      if (!id || !details.length || map.has(id)) continue;
+      const byTeam = {};
+      for (const d of details) {
+        if (!d?.scoringPlay) continue;
+        const tid = String(d?.team?.id || '');
+        const player =
+          d?.athletesInvolved?.[0]?.shortName ||
+          d?.athletesInvolved?.[0]?.displayName ||
+          '';
+        const min = d?.clock?.displayValue || '';
+        if (!tid || !player) continue;
+        const label = `${player}${min ? ` ${min}` : ''}${d.ownGoal ? ' (OG)' : ''}${d.penaltyKick ? ' (P)' : ''}`;
+        if (!byTeam[tid]) byTeam[tid] = [];
+        byTeam[tid].push(label);
+      }
+      map.set(id, byTeam);
     }
-    map.set(id, byTeam);
   }
   return map;
 }
@@ -314,35 +343,98 @@ function normalizeHeaderEvent(ev, league, scorersMap) {
 
 export async function fetchEspnFootballMatches(rawDate = '', options = {}) {
   const date = sanitizeDateParam(rawDate);
+  const leagueFilter = sanitizeLeagueParam(options.league);
   const includeUpcoming = options.upcoming !== undefined ? Boolean(options.upcoming) : !date;
-  const rangeParam = includeUpcoming ? computeDateRangeParam(date, 7) : '';
 
-  // Extra leagues that ESPN's generic 7-day soccer header sometimes omits unless queried with &league=
-  const extraLeagues = includeUpcoming ? ['ita.1', 'ger.1', 'fra.1', 'ind.1', 'bra.1'] : [];
+  // ESPN's ?dates=YYYYMMDD filters on US Eastern days (UTC-5/UTC-4), whereas Flash
+  // displays IST calendar dates (UTC+5:30). Every IST day D (00:00–23:59 IST) spans
+  // ESPN's prevYmd (00:00–10:29 IST, including 20:00 UTC / 1:30 AM IST UCL matches)
+  // AND targetYmd (10:30–23:59 IST, including 17:45 UTC / 11:15 PM IST UCL matches).
+  const todayYmd = todayIstYmd();
+  const todayIso = ymdToIso(todayYmd);
+  const targetYmd = date || todayYmd;
+  const targetIso = ymdToIso(targetYmd);
+  const prevYmd = shiftYmd(targetYmd, -1);
+  const needScorers = targetIso <= todayIso;
 
-  const tasks = [
-    fetchJson(espnSoccerHeaderUrl(date), { timeoutMs: 6500, retries: 1 }),
-    fetchJson(espnSoccerAllUrl(date), { timeoutMs: 5500, retries: 0 }),
-  ];
-  if (includeUpcoming) {
-    tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam), { timeoutMs: 6000, retries: 0 }));
-    for (const slug of extraLeagues) {
-      tasks.push(fetchJson(espnSoccerHeaderUrl(rangeParam, slug), { timeoutMs: 5500, retries: 0 }));
+  const headerTasks = [];
+  const scorerTasks = [];
+
+  if (leagueFilter) {
+    if (!date) {
+      // Full league schedule (e.g. ?league=uefa.champions returns all League Phase / season fixtures).
+      headerTasks.push(
+        fetchJson(espnSoccerHeaderUrl('', leagueFilter, 200), { timeoutMs: 6500, retries: 1 }),
+        fetchJson(espnSoccerHeaderUrl(`${prevYmd}-${shiftYmd(targetYmd, 30)}`, leagueFilter, 200), {
+          timeoutMs: 6500,
+          retries: 0,
+        }),
+      );
+    } else if (includeUpcoming) {
+      headerTasks.push(
+        fetchJson(espnSoccerHeaderUrl(`${prevYmd}-${shiftYmd(targetYmd, 30)}`, leagueFilter, 200), {
+          timeoutMs: 6500,
+          retries: 1,
+        }),
+      );
+    } else {
+      headerTasks.push(
+        fetchJson(espnSoccerHeaderUrl(`${prevYmd}-${targetYmd}`, leagueFilter, 200), {
+          timeoutMs: 6500,
+          retries: 1,
+        }),
+      );
+    }
+    if (needScorers) {
+      scorerTasks.push(
+        fetchJson(espnSoccerAllUrl(prevYmd, 300), { timeoutMs: 5500, retries: 0 }),
+        fetchJson(espnSoccerAllUrl(targetYmd, 300), { timeoutMs: 5500, retries: 0 }),
+      );
+    }
+  } else {
+    // Always fetch both prevYmd and targetYmd with limit=300 (ESPN defaults to 75,
+    // silently truncating busy days and dropping late-night European games in IST).
+    headerTasks.push(
+      fetchJson(espnSoccerHeaderUrl(prevYmd, '', 300), { timeoutMs: 6500, retries: 1 }),
+      fetchJson(espnSoccerHeaderUrl(targetYmd, '', 300), { timeoutMs: 6500, retries: 1 }),
+    );
+    if (needScorers) {
+      scorerTasks.push(
+        fetchJson(espnSoccerAllUrl(prevYmd, 300), { timeoutMs: 5500, retries: 0 }),
+        fetchJson(espnSoccerAllUrl(targetYmd, 300), { timeoutMs: 5500, retries: 0 }),
+      );
+    }
+    if (includeUpcoming) {
+      const rangeParam = computeDateRangeParam(targetYmd, 7);
+      const uefaRangeParam = computeDateRangeParam(targetYmd, 21);
+      headerTasks.push(
+        fetchJson(espnSoccerHeaderUrl(rangeParam, '', 200), { timeoutMs: 6000, retries: 0 }),
+      );
+      for (const slug of CURATED_FOOTBALL_LEAGUES) {
+        const slugRange = UEFA_EXTENDED_LEAGUES.has(slug) ? uefaRangeParam : rangeParam;
+        headerTasks.push(
+          fetchJson(espnSoccerHeaderUrl(slugRange, slug, 200), { timeoutMs: 5500, retries: 0 }),
+        );
+      }
     }
   }
 
-  const settled = await Promise.allSettled(tasks);
-  const [headerRes, allRes, ...upcomingRes] = settled;
+  const [headerSettled, scorerSettled] = await Promise.all([
+    Promise.allSettled(headerTasks),
+    Promise.allSettled(scorerTasks),
+  ]);
 
-  if (headerRes.status !== 'fulfilled' && !upcomingRes.some((r) => r.status === 'fulfilled')) {
-    throw headerRes.reason || new Error('ESPN Soccer header unreachable');
+  if (!headerSettled.some((r) => r.status === 'fulfilled')) {
+    const firstErr = headerSettled.find((r) => r.status === 'rejected')?.reason;
+    throw firstErr || new Error('ESPN Soccer header unreachable');
   }
 
-  const scorersMap = allRes.status === 'fulfilled' ? buildScorersMap(allRes.value) : new Map();
-  const leagueGroups = [
-    ...(headerRes.status === 'fulfilled' ? headerRes.value?.sports?.[0]?.leagues || [] : []),
-    ...upcomingRes.flatMap((r) => (r.status === 'fulfilled' ? r.value?.sports?.[0]?.leagues || [] : [])),
-  ];
+  const scorersMap = buildScorersMap(
+    scorerSettled.filter((r) => r.status === 'fulfilled').map((r) => r.value),
+  );
+  const leagueGroups = headerSettled.flatMap((r) =>
+    r.status === 'fulfilled' ? r.value?.sports?.[0]?.leagues || [] : [],
+  );
 
   const matches = [];
   const seen = new Set();
@@ -351,6 +443,19 @@ export async function fetchEspnFootballMatches(rawDate = '', options = {}) {
     for (const ev of league?.events || []) {
       const m = normalizeHeaderEvent(ev, league, scorersMap);
       if (!m || seen.has(m.id)) continue;
+
+      if (leagueFilter && !date) {
+        // Explicit full-league query without date: keep the complete schedule.
+      } else if (includeUpcoming) {
+        // Drop finished matches from prevYmd (yesterday IST) while keeping live midnight-crossing games.
+        if (m.dateISO && m.dateISO < targetIso && m.status !== 'live') continue;
+      } else {
+        // Specific IST date requested: keep only matches on targetIso (plus live games if viewing today).
+        const matchesDay = !m.dateISO || m.dateISO === targetIso;
+        const liveToday = targetIso === todayIso && m.status === 'live';
+        if (!matchesDay && !liveToday) continue;
+      }
+
       seen.add(m.id);
       matches.push(m);
     }
@@ -549,7 +654,7 @@ export async function fetchEspnFootballDetail(rawIdInput, rawLeagueInput) {
           : 'FIRST HALF'
       : status === 'ft'
         ? 'FULL TIME'
-        : comp?.status?.type?.shortDetail || 'SCHEDULED';
+        : 'SCHEDULED';
 
   const scheduledIst = comp?.date ? formatDateAndKickoff(comp.date).kickoffLabel : '';
 
@@ -643,13 +748,18 @@ function normalizeFinishedFootballEvent(event, teamId) {
 
 function findStandingEntries(value, depth = 0) {
   if (!value || typeof value !== 'object' || depth > 7) return [];
-  if (!Array.isArray(value)) {
-    if (Array.isArray(value.entries) && value.entries.length) return value.entries;
-    if (value.standings && Array.isArray(value.standings.entries)) return value.standings.entries;
-    for (const child of Object.values(value)) {
-      const found = findStandingEntries(child, depth + 1);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findStandingEntries(item, depth + 1);
       if (found.length) return found;
     }
+    return [];
+  }
+  if (Array.isArray(value.entries) && value.entries.length) return value.entries;
+  if (value.standings && Array.isArray(value.standings.entries)) return value.standings.entries;
+  for (const child of Object.values(value)) {
+    const found = findStandingEntries(child, depth + 1);
+    if (found.length) return found;
   }
   return [];
 }
@@ -702,7 +812,7 @@ export async function fetchEspnFootballPreview({
 
   const teamScheduleUrl = (id) =>
     `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/teams/${encodeURIComponent(id)}/schedule`;
-  const standingsUrl = `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/standings`;
+  const standingsUrl = `https://site.api.espn.com/apis/v2/sports/soccer/${encodeURIComponent(league)}/standings`;
   const [homeScheduleResult, awayScheduleResult, standingsResult] = await Promise.allSettled([
     fetchJson(teamScheduleUrl(homeTeamId), { timeoutMs: 6500, retries: 0 }),
     fetchJson(teamScheduleUrl(awayTeamId), { timeoutMs: 6500, retries: 0 }),

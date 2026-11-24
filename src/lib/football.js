@@ -23,9 +23,10 @@ function friendlyFootballError(e) {
   return e
 }
 
-export async function fetchFootballLive(dateStr = '', { force = false } = {}) {
+export async function fetchFootballLive(dateStr = '', { force = false, league = '' } = {}) {
   const cleanDate = String(dateStr || '').replace(/-/g, '')
-  const cacheKey = `live-cache-football-v4-${cleanDate || 'today'}`
+  const cleanLeague = String(league || '').trim()
+  const cacheKey = `live-cache-football-v5-${cleanDate || 'today'}${cleanLeague ? `-${cleanLeague}` : ''}`
   if (!force) {
     try {
       const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null')
@@ -39,6 +40,7 @@ export async function fetchFootballLive(dateStr = '', { force = false } = {}) {
   const job = (async () => {
     const params = new URLSearchParams()
     if (cleanDate) params.set('date', cleanDate)
+    if (cleanLeague) params.set('league', cleanLeague)
     if (force) params.set('t', String(Date.now()))
     const qs = params.toString() ? `?${params}` : ''
     let res

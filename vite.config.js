@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl, fetchSafePublicHtml } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail, fetchEspnCricketPreview } from './api/_cricket.js'
-import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam } from './api/_football.js'
+import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam, sanitizeLeagueParam } from './api/_football.js'
 import f1StandingsHandler from './api/f1standings.js'
 import widgetScoresHandler from './api/widget-scores.js'
 
@@ -106,11 +106,12 @@ function footballDevMiddleware() {
           const pathname = u.pathname || '/'
           if (pathname === '/live' || pathname === '/' || pathname === '/fixtures') {
             const date = sanitizeDateParam(u.searchParams.get('date'))
+            const league = sanitizeLeagueParam(u.searchParams.get('league') || u.searchParams.get('leagueSlug'))
             const up = u.searchParams.get('upcoming')
             const upcoming = up == null ? !date : up === '1' || up === 'true'
-            const matches = await fetchEspnFootballMatches(date, { upcoming })
+            const matches = await fetchEspnFootballMatches(date, { upcoming, league })
             res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
-            send(200, { provider: 'espn', date: date || 'today', matches })
+            send(200, { provider: 'espn', date: date || 'today', ...(league ? { league } : {}), matches })
             return
           }
           if (pathname === '/detail') {
