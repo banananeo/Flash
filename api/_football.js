@@ -21,6 +21,9 @@ export const espnSoccerAllUrl = (date, limit = 300) => {
 export const espnSoccerSummaryUrl = (leagueSlug, eventId) =>
   `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(leagueSlug)}/summary?event=${encodeURIComponent(eventId)}`;
 
+export const espnSoccerStandingsUrl = (leagueSlug) =>
+  `https://site.api.espn.com/apis/v2/sports/soccer/${encodeURIComponent(leagueSlug)}/standings`;
+
 // Top leagues fetched across the upcoming window when upcoming=1 so users can always
 // see the live score OR next upcoming match for any major league or club.
 export const CURATED_FOOTBALL_LEAGUES = [
@@ -812,7 +815,7 @@ export async function fetchEspnFootballPreview({
 
   const teamScheduleUrl = (id) =>
     `https://site.api.espn.com/apis/site/v2/sports/soccer/${encodeURIComponent(league)}/teams/${encodeURIComponent(id)}/schedule`;
-  const standingsUrl = `https://site.api.espn.com/apis/v2/sports/soccer/${encodeURIComponent(league)}/standings`;
+  const standingsUrl = espnSoccerStandingsUrl(league);
   const [homeScheduleResult, awayScheduleResult, standingsResult] = await Promise.allSettled([
     fetchJson(teamScheduleUrl(homeTeamId), { timeoutMs: 6500, retries: 0 }),
     fetchJson(teamScheduleUrl(awayTeamId), { timeoutMs: 6500, retries: 0 }),
@@ -878,4 +881,108 @@ export async function fetchEspnFootballPreview({
   }
 
   return { form: { home: homeForm, away: awayForm }, headToHead, standings };
+}
+
+function normalizeHexColor(raw) {
+  const clean = String(raw || '').replace(/^#+/, '').trim();
+  return /^[0-9a-f]{6}$/i.test(clean) ? `#${clean}` : '';
+}
+
+function readStandingStat(stats, names) {
+  const found = (Array.isArray(stats) ? stats : []).find((item) =>
+    names.includes(String(item?.name || '').toLowerCase()),
+  );
+  return found || null;
+}
+
+export async function fetchEspnFootballStandings(rawLeague = 'eng.1') {
+  const leagueSlug = sanitizeLeagueParam(rawLeague || 'eng.1') || 'eng.1';
+  const payload = await fetchJson(espnSoccerStandingsUrl(leagueSlug), {
+    timeoutMs: 7500,
+    retries: 1,
+  });
+
+  const child = Array.isArray(payload?.children) ? payload.children[0] : null;
+  const entries = findStandingEntries(payload);
+
+  const rows = entries
+    .map((entry, idx) => {
+      const stats = Array.isArray(entry?.stats) ? entry.stats : [];
+      const num = (names, fallback = 0) => {
+        const s = readStandingStat(stats, names);
+        const v = Number(s?.value ?? s?.displayValue);
+        return Number.isFinite(v) ? v : fallback;
+      };
+      const disp = (names) => {
+        const s = readStandingStat(stats, names);
+        return s?.displayValue != null ? String(s.displayValue).trim() : '';
+      };
+
+      const rank = num(['rank', 'position', 'playoffseed'], idx + 1);
+      const played = num(['gamesplayed', 'played', 'overallgamesplayed']);
+      const won = num(['wins', 'overallwins']);
+      const drawn = num(['ties', 'draws', 'overalltied']);
+      const lost = num(['losses', 'overalllosses']);
+      const gf = num(['pointsfor', 'goalsfor', 'overallpointsfor']);
+      const ga = num(['pointsagainst', 'goalsagainst', 'overallpointsagainst']);
+      const gdNum = num(['pointdifferential', 'goaldifferential'], gf - ga);
+      const gdDisplay = disp(['pointdifferential', 'goaldifferential']);
+      const gd = gdDisplay || (gdNum > 0 ? `+${gdNum}` : String(gdNum));
+      const points = num(['points', 'overallpoints']);
+
+      const team = entry?.team || {};
+      const name = team.displayName || team.name || 'Team';
+      const noteDesc = String(entry?.note?.description || '').trim();
+
+      return {
+        rank,
+        teamId: String(team.id || ''),
+        name,
+        shortName: team.shortDisplayName || team.name || name,
+        short: team.abbreviation || shortOf(name),
+        logo: team.logos?.[0]?.href || '',
+        played,
+        won,
+        drawn,
+        lost,
+        gf,
+        ga,
+        gd,
+        gdNum,
+        points,
+        note: noteDesc
+          ? {
+              label: noteDesc,
+              color: normalizeHexColor(entry?.note?.color),
+            }
+          : null,
+      };
+    })
+    .sort((a, b) => a.rank - b.rank || b.points - a.points || b.gdNum - a.gdNum);
+
+  const zones = [];
+  const seenZones = new Set();
+  for (const r of rows) {
+    if (!r.note?.label) continue;
+    const key = r.note.label.toLowerCase();
+    if (seenZones.has(key)) continue;
+    seenZones.add(key);
+    zones.push(r.note);
+  }
+
+  const name = payload?.name || child?.name || leagueSlug.toUpperCase();
+  const season = payload?.seasons?.[0]?.displayName || child?.standings?.seasonDisplayName || '';
+  const rawStage = String(child?.name || '').trim();
+  const stage = rawStage && rawStage !== name && rawStage !== season ? rawStage : '';
+
+  return {
+    provider: 'espn',
+    leagueSlug,
+    name,
+    season,
+    stage,
+    rows,
+    zones,
+    updatedAt: new Date().toISOString(),
+  };
 }

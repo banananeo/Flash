@@ -6,6 +6,7 @@ import ScorePreferencesBar from './ScorePreferencesBar'
 import { fetchCricketDetail } from '../../lib/cricket'
 
 const IPLSection = lazy(() => import('./IPLSection'))
+const FootballStandings = lazy(() => import('./FootballStandings'))
 import {
   useScoreStore,
   isFavMatch,
@@ -318,6 +319,7 @@ export default function LiveScoresSection() {
   const refreshTick = useScoreStore((s) => s.refreshTick)
 
   const [featuredDetailState, setFeaturedDetailState] = useState({ key: null, data: null })
+  const [footballMode, setFootballMode] = useState('live') // 'live' | 'standings'
   const [cricketMode, setCricketMode] = useState('live') // 'live' | 'ipl'
 
   useEffect(() => {
@@ -453,6 +455,35 @@ export default function LiveScoresSection() {
         })}
       </div>
 
+      {/* Football Mode Toggle: Live & Fixtures | Standings */}
+      {sport === 'football' && (
+        <div className="mt-4 inline-flex rounded-full bg-sage p-1">
+          <button
+            type="button"
+            onClick={() => setFootballMode('live')}
+            className={`rounded-full px-4 py-1.5 text-[12px] transition-colors ${
+              footballMode === 'live'
+                ? 'bg-white font-bold text-ink shadow-sm'
+                : 'font-medium text-muted hover:text-ink'
+            }`}
+          >
+            Live & Fixtures
+          </button>
+          <button
+            type="button"
+            onClick={() => setFootballMode('standings')}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] transition-colors ${
+              footballMode === 'standings'
+                ? 'bg-white font-bold text-ink shadow-sm'
+                : 'font-medium text-muted hover:text-ink'
+            }`}
+          >
+            <Trophy size={13} className="text-brand-strong" />
+            <span>Standings</span>
+          </button>
+        </div>
+      )}
+
       {/* Cricket Mode Toggle: Live & Fixtures | IPL Hub */}
       {sport === 'cricket' && (
         <div className="mt-4 inline-flex rounded-full bg-sage p-1">
@@ -482,7 +513,20 @@ export default function LiveScoresSection() {
         </div>
       )}
 
-      {sport === 'cricket' && cricketMode === 'ipl' ? (
+      {sport === 'football' && footballMode === 'standings' ? (
+        <Suspense
+          fallback={
+            <div className="mt-5 space-y-3 rounded-[20px] border border-hairline bg-white p-5">
+              <div className="h-6 w-36 animate-pulse rounded bg-sage" />
+              <div className="h-10 animate-pulse rounded-[10px] bg-sage/80" />
+              <div className="h-10 animate-pulse rounded-[10px] bg-sage/80" />
+              <div className="h-10 animate-pulse rounded-[10px] bg-sage/80" />
+            </div>
+          }
+        >
+          <FootballStandings />
+        </Suspense>
+      ) : sport === 'cricket' && cricketMode === 'ipl' ? (
         <Suspense
           fallback={
             <div className="mt-5 space-y-4">

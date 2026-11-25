@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 import { getNews, fetchEspnStory } from './api/_news.js'
 import { extractArticle, assertPublicHttpUrl, fetchSafePublicHtml } from './api/_extract.js'
 import { fetchEspnLiveMatches, fetchEspnMatchDetail, fetchEspnCricketPreview } from './api/_cricket.js'
-import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, sanitizeDateParam, sanitizeLeagueParam } from './api/_football.js'
+import { fetchEspnFootballMatches, fetchEspnFootballDetail, fetchEspnFootballPreview, fetchEspnFootballStandings, sanitizeDateParam, sanitizeLeagueParam } from './api/_football.js'
 import f1StandingsHandler from './api/f1standings.js'
 import widgetScoresHandler from './api/widget-scores.js'
 
@@ -124,6 +124,18 @@ function footballDevMiddleware() {
             const detail = await fetchEspnFootballDetail(id, league)
             res.setHeader('Cache-Control', u.searchParams.has('t') ? 'no-store' : 's-maxage=30, stale-while-revalidate=30')
             send(200, detail)
+            return
+          }
+          if (pathname === '/standings') {
+            const league =
+              sanitizeLeagueParam(u.searchParams.get('league') || u.searchParams.get('leagueSlug')) ||
+              'eng.1'
+            const standings = await fetchEspnFootballStandings(league)
+            res.setHeader(
+              'Cache-Control',
+              u.searchParams.has('t') ? 'no-store' : 's-maxage=120, stale-while-revalidate=300',
+            )
+            send(200, standings)
             return
           }
           next()
