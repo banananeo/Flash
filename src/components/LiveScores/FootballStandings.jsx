@@ -39,8 +39,9 @@ function TeamCrest({ src }) {
 export default function FootballStandings() {
   const favTeams = useScoreStore((s) => s.favTeams)
   const toggleFav = useScoreStore((s) => s.toggleFav)
+  const league = useScoreStore((s) => s.standingsLeague) || 'eng.1'
+  const setLeague = useScoreStore((s) => s.setStandingsLeague)
 
-  const [league, setLeague] = useState('eng.1')
   const [tables, setTables] = useState({})
   const [reqMeta, setReqMeta] = useState({ league: null, loading: false, error: '' })
   const [refreshNonce, setRefreshNonce] = useState(0)

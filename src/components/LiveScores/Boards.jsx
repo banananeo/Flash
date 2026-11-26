@@ -352,7 +352,7 @@ function MatchPreview({ preview, match, loading, error }) {
     <div className="mt-6 space-y-5">
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">PRE-MATCH CONTEXT</p>
-        <h3 className="mt-1 text-[20px] font-semibold leading-tight text-ink">The matchup, at a glance.</h3>
+        <h3 className="mt-1 text-[20px] font-semibold leading-tight text-ink">Match Preview</h3>
       </div>
 
       {loading ? (
@@ -531,7 +531,7 @@ export function FootballBoard({ match, detail, loading, preview, previewLoading,
       {!loading && tab === 'overview' && (
         <div className="mt-7 space-y-7">
           <div>
-            <h3 className="text-[19px] font-semibold text-ink">The match in numbers</h3>
+            <h3 className="text-[19px] font-semibold text-ink">Match Statistics</h3>
             {stats.length > 0 ? (
               <div className="mt-5 space-y-5">
                 {stats.map((s, i) => (

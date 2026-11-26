@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/react'
 import SplashScreen from './components/SplashScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 import { TopBar, BottomNav } from './components/AppShell'
+import HomeSection from './components/Home/HomeSection'
 import LiveScoresSection from './components/LiveScores/LiveScoresSection'
 import InstallPrompt from './components/LiveScores/InstallPrompt'
 import { useScoreStore } from './store/useScoreStore'
@@ -14,7 +15,7 @@ const ScoreboardModal = lazy(() => import('./components/LiveScores/ScoreboardMod
 
 function SectionFallback() {
   return (
-    <div className="mx-auto w-full max-w-[460px] space-y-4 px-6 pb-28 pt-8 lg:max-w-[780px]">
+    <div className="mx-auto w-full max-w-[480px] space-y-4 px-6 pb-28 pt-8 sm:max-w-[640px] lg:max-w-[860px]">
       <div className="h-9 w-44 animate-pulse rounded-[12px] bg-sage" />
       <div className="h-[190px] animate-pulse rounded-[20px] bg-sage" />
       <div className="h-16 animate-pulse rounded-[16px] bg-white" />
@@ -25,6 +26,7 @@ function SectionFallback() {
 export default function App() {
   const view = useScoreStore((s) => s.view)
   const fetchBoth = useScoreStore((s) => s.fetchBoth)
+  const fetchF1 = useF1Store((s) => s.fetchF1)
   const fetchSchedule = useF1Store((s) => s.fetchSchedule)
   const selectedMatch = useScoreStore((s) => s.selected)
   const [splash, setSplash] = useState(true)
@@ -32,8 +34,9 @@ export default function App() {
   const hideSplash = useCallback(() => setSplash(false), [])
 
   useEffect(() => {
-    // Warm scores + F1 schedule on startup
+    // Warm scores + F1 standings & schedule on startup
     fetchBoth()
+    fetchF1()
     fetchSchedule()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -56,7 +59,7 @@ export default function App() {
     return () => {
       document.body.style.overflow = bodyOverflow
       document.documentElement.style.overflow = rootOverflow
-      document.body.style.overscrollBehavior = bodyOverscroll
+      document.documentElement.style.overscrollBehavior = bodyOverscroll
     }
   }, [selectedMatch])
 
@@ -70,7 +73,13 @@ export default function App() {
         <main>
           <ErrorBoundary key={view}>
             <Suspense fallback={<SectionFallback />}>
-              {view === 'f1' ? <F1Section /> : <LiveScoresSection />}
+              {view === 'f1' ? (
+                <F1Section />
+              ) : view === 'scores' ? (
+                <LiveScoresSection />
+              ) : (
+                <HomeSection />
+              )}
             </Suspense>
           </ErrorBoundary>
         </main>

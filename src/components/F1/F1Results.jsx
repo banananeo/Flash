@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { ArrowUpRight } from 'lucide-react'
 import { useF1Store } from '../../store/useF1Store'
 import { TyreBadge } from './F1Telemetry'
 
 const pad2 = (n) => String(n).padStart(2, '0')
+const teamColour = (c) => `#${String(c || '64748B').replace(/^#/, '')}`
 
 function fmtRaceMeta(schedule, round, circuit) {
   const hit = (schedule || []).find((r) => String(r.round) === String(round))
@@ -12,16 +15,35 @@ function fmtRaceMeta(schedule, round, circuit) {
       const d = new Date(hit.dateUTC)
       const dd = String(d.getUTCDate()).padStart(2, '0')
       const mon = d.toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }).toUpperCase()
-      dateStr = `${dd} ${mon} ${d.getUTCFullYear()}`
-    } catch { /* ignore */ }
+      dateStr = `${dd} ${mon}`
+    } catch {
+      /* ignore */
+    }
   }
-  return [circuit || hit?.circuit, dateStr, round ? `ROUND ${round}` : '']
+  return [round ? `ROUND ${round}` : '', hit?.locality || circuit || hit?.circuit, dateStr]
     .filter(Boolean)
     .join(' · ')
     .toUpperCase()
 }
 
-// 09 · Race results — teal winner hero card + classification table
+function shortRaceOption(r) {
+  const place = r.locality || r.country || String(r.name || '').replace(/\s*Grand Prix$/i, '')
+  return place ? `R${r.round} · ${place}` : `R${r.round}`
+}
+
+function parseLapSeconds(str) {
+  if (!str) return Infinity
+  const parts = String(str).trim().split(':')
+  if (parts.length === 2) {
+    const mins = Number(parts[0])
+    const secs = Number(parts[1])
+    if (Number.isFinite(mins) && Number.isFinite(secs)) return mins * 60 + secs
+  }
+  const v = Number(str)
+  return Number.isFinite(v) ? v : Infinity
+}
+
+// Session Results — Race, Qualifying & Practice
 export default function F1Results({ nextRound, onOpenTelemetry }) {
   const [mode, setMode] = useState('race') // race | qualifying | practice
   const schedule = useF1Store((s) => s.schedule)
@@ -34,32 +56,52 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
   const telemetryLoading = useF1Store((s) => s.telemetryLoading)
   const fetchTelemetry = useF1Store((s) => s.fetchTelemetry)
 
-  const practiceSessions = (telemetry?.sessions || []).filter((s) =>
-    ['FP1', 'FP2', 'FP3'].includes(s.code),
-  )
-  const practiceDrivers = telemetry?.drivers || []
+  // Only show practice telemetry when it belongs to an active race weekend
+  const practiceSessions = telemetry?.telemetryClosed
+    ? []
+    : (telemetry?.sessions || []).filter((s) => ['FP1', 'FP2', 'FP3'].includes(s.code))
+  const practiceDrivers = telemetry?.telemetryClosed ? [] : telemetry?.drivers || []
 
-  const doneRounds = [...(schedule || [])]
-    .filter((r) => nextRound == null || r.round < nextRound)
-    .sort((a, b) => b.round - a.round)
+  const doneRounds = useMemo(
+    () =>
+      [...(schedule || [])]
+        .filter((r) => nextRound == null || r.round < nextRound)
+        .sort((a, b) => b.round - a.round),
+    [schedule, nextRound],
+  )
 
   const data = mode === 'qualifying' ? qualiResults : raceResults
-  const rows = data?.rows || []
+  const rows = useMemo(() => data?.rows || [], [data])
   const winner = rows[0] || null
   const rest = rows.slice(1)
   const activeRound = data?.round || resultsRound
 
+  // Identify overall fastest lap holder in Race mode
+  const fastestDriverAcro = useMemo(() => {
+    if (mode !== 'race' || !rows.length) return ''
+    let bestSec = Infinity
+    let bestAcro = ''
+    for (const r of rows) {
+      const s = parseLapSeconds(r.fastest)
+      if (s < bestSec) {
+        bestSec = s
+        bestAcro = r.acro || r.name
+      }
+    }
+    return bestAcro
+  }, [mode, rows])
+
   return (
     <div>
-      {/* Title + Round picker */}
+      {/* Header + Round Selector */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[28px] font-medium leading-tight tracking-[-0.02em] text-ink">
-            {data?.raceName || 'Latest Grand Prix'}
-          </h2>
-          <p className="mt-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+          <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">
             {fmtRaceMeta(schedule, activeRound, data?.circuit)}
           </p>
+          <h2 className="mt-1.5 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[25px]">
+            {data?.raceName || 'Latest Grand Prix'}
+          </h2>
         </div>
 
         {doneRounds.length > 0 && (
@@ -67,23 +109,28 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
             aria-label="Select round"
             value={resultsRound || ''}
             onChange={(e) => fetchRound(e.target.value || 'last')}
-            className="shrink-0 rounded-full bg-sage px-3 py-1.5 text-[12px] font-semibold text-ink focus:outline-none focus:ring-2 focus:ring-pulse"
+            className="h-8 shrink-0 rounded-full border border-hairline bg-white px-3.5 font-display text-[12px] font-semibold text-ink shadow-[0_1px_2px_rgba(15,23,42,0.03)] focus:outline-none focus:ring-2 focus:ring-pulse"
           >
             {!resultsRound && <option value="">Latest</option>}
-            {!!resultsRound && !doneRounds.some((r) => String(r.round) === String(resultsRound)) && (
-              <option value={resultsRound}>R{resultsRound}</option>
-            )}
+            {!!resultsRound &&
+              !doneRounds.some((r) => String(r.round) === String(resultsRound)) && (
+                <option value={resultsRound}>R{resultsRound}</option>
+              )}
             {doneRounds.map((r) => (
               <option key={r.round} value={r.round}>
-                R{r.round}
+                {shortRaceOption(r)}
               </option>
             ))}
           </select>
         )}
       </div>
 
-      {/* Session Pills: Race | Qualifying | Practice */}
-      <div className="mt-5 flex items-center gap-2">
+      {/* Underline Session Tabs: Race | Qualifying | Practice */}
+      <div
+        role="tablist"
+        aria-label="Session classification"
+        className="mt-5 flex items-center gap-6 border-b border-hairline"
+      >
         {[
           { id: 'race', label: 'Race' },
           { id: 'qualifying', label: 'Qualifying' },
@@ -94,91 +141,117 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
             <button
               key={t.id}
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => setMode(t.id)}
-              className={`rounded-full px-4 py-1.5 text-[13px] transition-colors ${active ? 'bg-pulse font-semibold text-ink' : 'font-medium text-muted hover:text-ink'
-                }`}
+              className={`relative pb-3 text-[14px] transition-colors ${
+                active ? 'font-bold text-ink' : 'font-medium text-muted hover:text-ink'
+              }`}
             >
               {t.label}
+              {active && (
+                <motion.span
+                  layoutId="f1-results-underline"
+                  transition={{ type: 'spring', stiffness: 460, damping: 36 }}
+                  className="absolute bottom-0 left-0 right-0 h-[2px] bg-pulse"
+                />
+              )}
             </button>
           )
         })}
       </div>
 
       {resultsLoading ? (
-        <div className="mt-6 space-y-4">
-          <div className="h-[160px] animate-pulse rounded-[20px] bg-sage" />
-          <div className="h-12 animate-pulse rounded-[12px] bg-white" />
-          <div className="h-12 animate-pulse rounded-[12px] bg-white" />
+        <div className="mt-5 space-y-4">
+          <div className="h-[136px] animate-pulse rounded-[22px] border border-hairline bg-white" />
+          <div className="h-[260px] animate-pulse rounded-[22px] border border-hairline bg-white" />
         </div>
       ) : mode === 'practice' ? (
-        <div className="mt-6 space-y-5">
-          {/* Practice session switcher (FP1 / FP2 / FP3) */}
+        <div className="mt-5 space-y-4">
+          {/* Practice Switcher + Telemetry Link */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              {(practiceSessions.length ? practiceSessions : [{ code: 'FP1', name: 'Practice 1' }, { code: 'FP2', name: 'Practice 2' }, { code: 'FP3', name: 'Practice 3' }]).map((ps) => {
+            <div className="inline-flex rounded-full bg-sage p-1">
+              {(practiceSessions.length
+                ? practiceSessions
+                : [
+                    { code: 'FP1', name: 'FP1' },
+                    { code: 'FP2', name: 'FP2' },
+                    { code: 'FP3', name: 'FP3' },
+                  ]
+              ).map((ps) => {
                 const isAct = telemetry?.activeSession?.code === ps.code
                 return (
                   <button
                     key={ps.code}
                     type="button"
                     onClick={() => fetchTelemetry(ps.code)}
-                    className={`rounded-full px-3.5 py-1 text-[12px] transition-colors ${isAct ? 'bg-ink font-bold text-white' : 'bg-sage font-medium text-muted hover:text-ink'
-                      }`}
+                    className={`rounded-full px-3 py-1 text-[12px] transition-colors ${
+                      isAct
+                        ? 'bg-white font-semibold text-ink shadow-sm'
+                        : 'font-medium text-muted hover:text-ink'
+                    }`}
                   >
-                    {ps.name}
+                    {ps.code || ps.name}
                   </button>
                 )
               })}
             </div>
+
             {onOpenTelemetry && (
               <button
                 type="button"
                 onClick={onOpenTelemetry}
-                className="text-[12px] font-bold text-brand-strong hover:underline"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-strong transition-colors hover:text-ink"
               >
-                Open full telemetry →
+                <span>Pit wall telemetry</span>
+                <ArrowUpRight size={13} />
               </button>
             )}
           </div>
 
           {telemetryLoading && !practiceDrivers.length ? (
-            <div className="space-y-3">
-              <div className="h-14 animate-pulse rounded-[14px] bg-white" />
-              <div className="h-14 animate-pulse rounded-[14px] bg-white" />
-            </div>
+            <div className="h-[240px] animate-pulse rounded-[22px] border border-hairline bg-white" />
           ) : !practiceDrivers.length ? (
-            <div className="rounded-[20px] bg-white p-6 text-center text-[13px] text-muted">
+            <div className="rounded-[22px] border border-hairline bg-white p-6 text-center text-[13px] text-muted">
               No practice laps recorded for this session yet.
             </div>
           ) : (
-            <div className="rounded-[20px] border border-hairline bg-white p-4 shadow-sm">
-              <div className="mb-2 flex items-center justify-between border-b border-hairline pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-                <span>{telemetry?.meetingName} · {telemetry?.activeSession?.name}</span>
-                <span>BEST LAP / GAP</span>
+            <div className="overflow-hidden rounded-[22px] border border-hairline bg-white shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
+              <div className="flex items-center justify-between border-b border-hairline px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted sm:px-6">
+                <span>
+                  {telemetry?.meetingName} · {telemetry?.activeSession?.name}
+                </span>
+                <span>Best / Gap</span>
               </div>
-              <div className="divide-y divide-hairline/80">
+              <div className="divide-y divide-hairline/70">
                 {practiceDrivers.map((d, i) => (
-                  <div key={d.num || d.acro || i} className="flex items-center justify-between gap-3 py-3">
+                  <div
+                    key={d.num || d.acro || i}
+                    className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-6"
+                  >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="w-6 shrink-0 font-display text-[13px] font-medium text-muted">
+                      <span className="w-6 shrink-0 font-display text-[12.5px] font-medium tabular-nums text-muted">
                         {pad2(d.pos || i + 1)}
                       </span>
+                      <span
+                        className="h-6 w-[3px] shrink-0 rounded-full"
+                        style={{ backgroundColor: teamColour(d.colour) }}
+                      />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-[14px] font-semibold text-ink">{d.name}</p>
+                          <p className="truncate text-[14.5px] font-semibold text-ink">{d.name}</p>
                           <TyreBadge compound={d.currentCompound} />
                         </div>
-                        <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
-                          {d.team}{d.laps ? ` · ${d.laps} laps` : ''}{d.topSpeed ? ` · ${d.topSpeed} km/h` : ''}
+                        <p className="mt-0.5 truncate text-[11.5px] font-medium text-muted">
+                          {d.team}
+                          {d.laps ? ` · ${d.laps} laps` : ''}
                         </p>
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-display text-[13px] font-bold text-ink">
-                        {d.bestLapDisplay || '—'}
-                      </p>
+                    <div className="shrink-0 text-right font-display tabular-nums">
+                      <p className="text-[13.5px] font-bold text-ink">{d.bestLapDisplay || '—'}</p>
                       {d.gapDisplay && (
-                        <p className="font-display text-[11px] font-medium text-muted">{d.gapDisplay}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-muted">{d.gapDisplay}</p>
                       )}
                     </div>
                   </div>
@@ -188,76 +261,153 @@ export default function F1Results({ nextRound, onOpenTelemetry }) {
           )}
         </div>
       ) : !rows.length ? (
-        <div className="mt-6 rounded-[20px] bg-white p-6 text-center text-[13px] text-muted">
+        <div className="mt-5 rounded-[22px] border border-hairline bg-white p-6 text-center text-[13px] text-muted">
           Classification pending — results land after the chequered flag.
         </div>
       ) : (
-        <div className="mt-6">
-          {/* Winner / Pole Hero Card */}
+        <div className="mt-5 space-y-4">
+          {/* Minimalist Winner / Pole Spotlight Card */}
           {winner && (
-            <div className="flex items-center justify-between gap-4 rounded-[20px] bg-pulse p-6 text-ink">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink/75">
-                  {mode === 'qualifying' ? 'POLE POSITION' : 'RACE WINNER'}
-                </p>
-                <p className="mt-2.5 text-[28px] font-semibold leading-[1.12] tracking-[-0.02em] text-ink">
-                  {winner.name}
-                </p>
-                <p className="mt-3 text-[12px] font-bold text-ink/85">
-                  {winner.team}
-                  {mode === 'qualifying'
-                    ? winner.best
-                      ? ` · ${winner.best}`
-                      : ''
-                    : winner.time
-                      ? ` · ${winner.time}`
-                      : ''}
-                </p>
+            <div className="overflow-hidden rounded-[22px] border border-hairline bg-white shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
+              <div
+                className="h-[3px] w-full"
+                style={{ backgroundColor: teamColour(winner.colour) }}
+              />
+              <div className="flex items-start justify-between gap-4 p-5 sm:p-6">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand-strong">
+                    {mode === 'qualifying' ? 'POLE POSITION' : 'RACE WINNER'}
+                  </p>
+                  <p className="mt-2 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[26px]">
+                    {winner.name}
+                  </p>
+                  <p className="mt-0.5 text-[13px] font-medium text-muted">{winner.team}</p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {(mode === 'qualifying' ? winner.best : winner.time) && (
+                      <span className="rounded-full bg-sage px-3 py-1 font-display text-[12px] font-bold tabular-nums text-ink">
+                        {mode === 'qualifying' ? winner.best : winner.time}
+                      </span>
+                    )}
+                    {mode === 'race' && winner.points > 0 && (
+                      <span className="rounded-full bg-sage-tint px-2.5 py-1 font-display text-[11px] font-bold tabular-nums text-brand-strong">
+                        +{winner.points} PTS
+                      </span>
+                    )}
+                    {mode === 'race' && winner.grid > 1 && (
+                      <span className="rounded-full bg-sage/75 px-2.5 py-1 text-[11px] font-semibold text-muted">
+                        Grid P{winner.grid} → P1
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <span className="shrink-0 font-display text-[40px] font-bold leading-none tracking-tight text-ink/10 sm:text-[48px]">
+                  01
+                </span>
               </div>
-              <span className="shrink-0 font-display text-[56px] font-bold leading-none tracking-tight text-ink">
-                01
-              </span>
             </div>
           )}
 
-          {/* Classification Table */}
-          <div className="mt-6 flex items-center justify-between border-b border-hairline pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            <span>CLASSIFICATION</span>
-            <span>{mode === 'qualifying' ? 'BEST LAP' : 'TIME / GAP'}</span>
-          </div>
+          {/* Contained Classification Card */}
+          {rest.length > 0 && (
+            <div className="overflow-hidden rounded-[22px] border border-hairline bg-white shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
+              <div className="flex items-center justify-between border-b border-hairline px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted sm:px-6">
+                <span>Classification</span>
+                <span>{mode === 'qualifying' ? 'Best Lap' : 'Time / Pts'}</span>
+              </div>
 
-          <div className="divide-y divide-hairline/80">
-            {rest.map((r, i) => {
-              const posLabel =
-                mode === 'qualifying'
-                  ? r.pos < 99
+              <div className="divide-y divide-hairline/70">
+                {rest.map((r, i) => {
+                  const isClassified = mode === 'qualifying' ? r.pos < 99 : r.pos != null
+                  const posLabel = isClassified
                     ? pad2(r.pos)
-                    : '–'
-                  : r.pos != null
-                    ? pad2(r.pos)
-                    : r.posText || '–'
-              const rightVal =
-                mode === 'qualifying'
-                  ? r.best || 'No time'
-                  : r.time || r.status || '—'
-              return (
-                <div key={r.num || r.acro || i} className="flex items-center gap-4 py-3.5">
-                  <span className="w-7 shrink-0 font-display text-[13px] font-medium text-muted">
-                    {posLabel}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold text-ink">{r.name}</p>
-                    <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
-                      {r.team}
-                    </p>
-                  </div>
-                  <span className="shrink-0 font-display text-[13px] font-semibold text-ink">
-                    {rightVal}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                    : r.posText === 'R'
+                      ? 'DNF'
+                      : r.posText || '–'
+                  const rightVal =
+                    mode === 'qualifying'
+                      ? r.best || 'No time'
+                      : r.time || r.status || '—'
+                  const hasFastest =
+                    mode === 'race' &&
+                    fastestDriverAcro &&
+                    (r.acro === fastestDriverAcro || r.name === fastestDriverAcro)
+                  const koStage =
+                    mode === 'qualifying'
+                      ? !r.q2
+                        ? 'Q1'
+                        : !r.q3
+                          ? 'Q2'
+                          : ''
+                      : ''
+
+                  return (
+                    <div
+                      key={r.num || r.acro || i}
+                      className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-sage/35 sm:gap-4 sm:px-6"
+                    >
+                      <span
+                        className={`w-7 shrink-0 font-display text-[12.5px] tabular-nums ${
+                          isClassified ? 'font-medium text-muted' : 'font-semibold text-muted/70'
+                        }`}
+                      >
+                        {posLabel}
+                      </span>
+
+                      <span
+                        className="h-6 w-[3px] shrink-0 rounded-full"
+                        style={{ backgroundColor: teamColour(r.colour) }}
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="truncate text-[14.5px] font-semibold leading-tight text-ink">
+                            {r.name}
+                          </p>
+                          {hasFastest && (
+                            <span
+                              title={`Fastest lap: ${r.fastest}`}
+                              className="shrink-0 rounded-full bg-purple-50 px-1.5 py-0.5 font-display text-[9px] font-bold tracking-[0.04em] text-[#7E22CE]"
+                            >
+                              FL
+                            </span>
+                          )}
+                          {koStage && (
+                            <span className="shrink-0 rounded bg-sage px-1.5 py-0.5 font-display text-[9px] font-bold text-muted">
+                              {koStage}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-[12px] font-medium text-muted">
+                          {r.team}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-baseline gap-3 font-display tabular-nums">
+                        <span
+                          className={`text-[13px] ${
+                            isClassified ? 'font-semibold text-ink' : 'font-medium text-muted'
+                          }`}
+                        >
+                          {rightVal}
+                        </span>
+                        {mode === 'race' && (
+                          <span
+                            className={`hidden w-9 text-right text-[12px] sm:inline ${
+                              r.points > 0 ? 'font-bold text-brand-strong' : 'text-muted/50'
+                            }`}
+                          >
+                            {r.points > 0 ? `+${r.points}` : '—'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

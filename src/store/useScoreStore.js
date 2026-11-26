@@ -36,8 +36,9 @@ const initialView = (() => {
     const p = new URLSearchParams(window.location.search)
     const v = p.get('view')
     if (v === 'f1') return 'f1'
+    if (v === 'scores' || p.has('match') || p.has('sport')) return 'scores'
   } catch { /* ignore */ }
-  return 'scores'
+  return 'home'
 })()
 
 const initialSport = (() => {
@@ -203,13 +204,13 @@ export const POPULAR_CRICKET_TEAMS = [
 ]
 
 export const useScoreStore = create((set, get) => ({
-  view: initialView,
+  view: initialView, // home | scores | f1
   setView: (view) => {
-    const nextView = view === 'f1' ? 'f1' : 'scores'
+    const nextView = view === 'f1' ? 'f1' : view === 'scores' ? 'scores' : 'home'
     set({ view: nextView })
     try {
       const params = new URLSearchParams(window.location.search)
-      if (nextView === 'f1') params.set('view', 'f1')
+      if (nextView === 'f1' || nextView === 'scores') params.set('view', nextView)
       else params.delete('view')
       const qs = params.toString()
       window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
@@ -218,6 +219,9 @@ export const useScoreStore = create((set, get) => ({
   },
 
   sport: initialSport, // football | cricket | following
+  footballMode: 'live', // live | standings
+  cricketMode: 'live', // live | ipl
+  standingsLeague: 'eng.1', // eng.1 | uefa.champions
   selectedDate: todayISO(),
   activeLeague: 'all', // 'all' | specific leagueName
   football: MOCK_FOOTBALL,
@@ -232,6 +236,29 @@ export const useScoreStore = create((set, get) => ({
   favTeams: loadJSON('flash-favs-v1', []),
   favLeagues: loadJSON('flash-fav-leagues-v1', []),
   f1Favs: loadJSON('flash-f1favs-v1', []),
+
+  setFootballMode: (footballMode) => set({ footballMode: footballMode === 'standings' ? 'standings' : 'live' }),
+  setCricketMode: (cricketMode) => set({ cricketMode: cricketMode === 'ipl' ? 'ipl' : 'live' }),
+  setStandingsLeague: (standingsLeague) => set({ standingsLeague: standingsLeague || 'eng.1' }),
+
+  openScoresTab: ({ sport, footballMode, cricketMode, standingsLeague, activeLeague } = {}) => {
+    const nextSport = sport || get().sport || 'football'
+    set((st) => ({
+      view: 'scores',
+      sport: nextSport,
+      footballMode: footballMode ?? (nextSport === 'football' ? 'live' : st.footballMode),
+      cricketMode: cricketMode ?? (nextSport === 'cricket' ? 'live' : st.cricketMode),
+      standingsLeague: standingsLeague ?? st.standingsLeague,
+      activeLeague: activeLeague ?? 'all',
+    }))
+    try {
+      const params = new URLSearchParams(window.location.search)
+      params.set('view', 'scores')
+      const qs = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''))
+    } catch { /* ignore */ }
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  },
 
   setActiveLeague: (activeLeague) => set({ activeLeague: activeLeague || 'all' }),
 

@@ -259,7 +259,7 @@ function AtTheCreaseCard({ match, detail }) {
 
   return (
     <div className="mt-6">
-      <h2 className="text-[20px] font-semibold text-ink">At the crease</h2>
+      <h2 className="text-[20px] font-semibold text-ink">Current Batters</h2>
       <div className="mt-3 rounded-[16px] bg-white p-4">
         <div className="grid grid-cols-[1fr_32px_32px_28px_28px] items-center gap-1 text-[10px] font-bold uppercase tracking-[0.06em] text-muted">
           <span>BATTER</span>
@@ -317,10 +317,12 @@ export default function LiveScoresSection() {
   const refreshMatch = useScoreStore((s) => s.refreshMatch)
   const refreshingMatches = useScoreStore((s) => s.refreshingMatches)
   const refreshTick = useScoreStore((s) => s.refreshTick)
+  const footballMode = useScoreStore((s) => s.footballMode)
+  const setFootballMode = useScoreStore((s) => s.setFootballMode)
+  const cricketMode = useScoreStore((s) => s.cricketMode)
+  const setCricketMode = useScoreStore((s) => s.setCricketMode)
 
   const [featuredDetailState, setFeaturedDetailState] = useState({ key: null, data: null })
-  const [footballMode, setFootballMode] = useState('live') // 'live' | 'standings'
-  const [cricketMode, setCricketMode] = useState('live') // 'live' | 'ipl'
 
   useEffect(() => {
     fetchScores(sport, selectedDate)
@@ -423,7 +425,7 @@ export default function LiveScoresSection() {
   const hasSelections = (favTeams?.length || 0) + (favLeagues?.length || 0) > 0
 
   return (
-    <section className="mx-auto w-full max-w-[460px] px-6 pb-28 pt-2 lg:max-w-[780px] lg:pt-8">
+    <section className="mx-auto w-full max-w-[480px] px-6 pb-28 pt-2 sm:max-w-[640px] lg:max-w-[860px] lg:pt-8">
 
       <h1 className="mt-1.5 text-[34px] font-medium leading-[1.12] tracking-[-0.02em] text-ink">
         Live Scores
@@ -667,16 +669,16 @@ export default function LiveScoresSection() {
               />
             )}
 
-            {/* Remaining Fixtures ("Around the grounds") */}
+            {/* Remaining Fixtures */}
             {remaining.length > 0 && (
               <div className="mt-7">
                 <div className="mb-3 flex items-baseline justify-between">
                   <h2 className="text-[20px] font-semibold text-ink">
                     {sport === 'following'
-                      ? 'Your live & upcoming schedule'
+                      ? 'Followed Matches'
                       : activeLeague !== 'all'
                         ? activeLeague
-                        : 'Around the grounds'}
+                        : 'All Matches'}
                   </h2>
                   <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
                     {liveCount > 0 ? `${liveCount} LIVE` : `${remaining.length} MATCHES`}

@@ -23,6 +23,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const VALID_SESSION_CODES = new Set(['', 'FP1', 'FP2', 'FP3', 'SQ', 'SPR', 'QUAL', 'RACE']);
 const MAX_TELEMETRY_CACHE = 10;
+const POST_RACE_TTL_MS = 3 * 3600 * 1000; // Remove previous race telemetry 3 hours after race ends
+const EST_RACE_DURATION_MS = 2 * 3600 * 1000; // Fallback race duration when only start time is available
 
 async function fetchJsonSafe(url, timeoutMs = 4500, retries = 1) {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -170,12 +172,56 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
     needMeetingMeta ? fetchJsonSafe(`${OPENF1_BASE}/sessions?meeting_key=latest`, 4000, 0) : Promise.resolve(meetingMetaCache.openSessionList),
   ]);
 
+  const now = Date.now();
   const espnEvents = (espnJson?.sports?.[0]?.leagues?.[0]?.events || []).map(normalizeEspnEvent);
-  const openMeeting = Array.isArray(openMeetings) && openMeetings[0] ? openMeetings[0] : meetingMetaCache.openMeeting;
-  const openSessionList = Array.isArray(openSessions) && openSessions.length ? openSessions : meetingMetaCache.openSessionList;
-  if (openMeeting && openSessionList.length && needMeetingMeta) {
-    meetingMetaCache = { ts: Date.now(), openMeeting, openSessionList };
+  const rawOpenMeeting = Array.isArray(openMeetings) && openMeetings[0] ? openMeetings[0] : meetingMetaCache.openMeeting;
+  const rawOpenSessions = Array.isArray(openSessions) && openSessions.length ? openSessions : meetingMetaCache.openSessionList;
+  if (rawOpenMeeting && rawOpenSessions.length && needMeetingMeta) {
+    meetingMetaCache = { ts: now, openMeeting: rawOpenMeeting, openSessionList: rawOpenSessions };
   }
+
+  // Determine whether OpenF1's latest meeting has passed the 3-hour post-race cutoff
+  const rawOpenRace = rawOpenSessions.find(
+    (s) => shortSessionCode(s.session_name || s.session_type, '') === 'RACE',
+  );
+  const openRaceEndMs = rawOpenRace?.date_end
+    ? Date.parse(rawOpenRace.date_end)
+    : rawOpenRace?.date_start
+      ? Date.parse(rawOpenRace.date_start) + EST_RACE_DURATION_MS
+      : NaN;
+  const lastOpenSessionEndMs = rawOpenSessions.reduce((max, s) => {
+    const ms = Date.parse(s.date_end || s.date_start || '');
+    return Number.isFinite(ms) && ms > max ? ms : max;
+  }, 0);
+  const isOpenMeetingExpired =
+    (Number.isFinite(openRaceEndMs) && now > openRaceEndMs + POST_RACE_TTL_MS) ||
+    (lastOpenSessionEndMs > 0 && now > lastOpenSessionEndMs + 4 * 86400000);
+
+  const openMeeting = isOpenMeetingExpired ? null : rawOpenMeeting;
+  const openSessionList = isOpenMeetingExpired ? [] : rawOpenSessions;
+
+  // Determine whether ESPN's current header race has also passed the 3-hour post-race cutoff
+  const espnRace = espnEvents.find((e) => e.code === 'RACE') || null;
+  const espnRaceStartMs = espnRace?.date ? Date.parse(espnRace.date) : NaN;
+  const sameWeekendOpenEnd =
+    Number.isFinite(openRaceEndMs) &&
+    Number.isFinite(espnRaceStartMs) &&
+    Math.abs(openRaceEndMs - espnRaceStartMs) < 36 * 3600 * 1000
+      ? openRaceEndMs
+      : NaN;
+  const resolvedRaceEndMs = Number.isFinite(sameWeekendOpenEnd)
+    ? sameWeekendOpenEnd
+    : espnRace?.status === 'finished' && Number.isFinite(espnRaceStartMs)
+      ? espnRaceStartMs + EST_RACE_DURATION_MS
+      : Number.isFinite(openRaceEndMs) && !isOpenMeetingExpired
+        ? openRaceEndMs
+        : NaN;
+  const isEspnWeekendExpired =
+    espnRace?.status === 'finished' &&
+    Number.isFinite(resolvedRaceEndMs) &&
+    now > resolvedRaceEndMs + POST_RACE_TTL_MS;
+
+  const activeEspnEvents = isEspnWeekendExpired ? [] : espnEvents;
 
   // Map OpenF1 sessions by short code (FP1, FP2, FP3, QUAL, SPR, SQ, RACE)
   const openByCode = new Map();
@@ -187,7 +233,7 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
   // Merge session list for the weekend selector
   const codesOrder = ['FP1', 'FP2', 'FP3', 'SQ', 'SPR', 'QUAL', 'RACE'];
   const allCodes = new Set([
-    ...espnEvents.map((e) => e.code),
+    ...activeEspnEvents.map((e) => e.code),
     ...openByCode.keys(),
   ]);
 
@@ -198,9 +244,8 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     })
     .map((code) => {
-      const espnEv = espnEvents.find((e) => e.code === code);
+      const espnEv = activeEspnEvents.find((e) => e.code === code);
       const openEv = openByCode.get(code);
-      const now = Date.now();
       const startMs = openEv?.date_start ? Date.parse(openEv.date_start) : espnEv?.date ? Date.parse(espnEv.date) : NaN;
       const endMs = openEv?.date_end ? Date.parse(openEv.date_end) : NaN;
       let status = espnEv?.status || 'upcoming';
@@ -218,6 +263,34 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
       };
     });
 
+  // If no session of an active race weekend is live or completed within the 3h post-race window,
+  // close telemetry immediately instead of serving stale previous-weekend data.
+  const hasStartedSession = sessions.some((s) => s.status === 'live' || s.status === 'finished');
+  if (!hasStartedSession) {
+    const upcomingMeetingName = activeEspnEvents[0]?.meetingName || '';
+    const upcomingLocation = activeEspnEvents[0]?.location || '';
+    const closedResult = {
+      telemetryClosed: true,
+      raceEndTime: Number.isFinite(resolvedRaceEndMs)
+        ? new Date(resolvedRaceEndMs).toISOString()
+        : Number.isFinite(openRaceEndMs)
+          ? new Date(openRaceEndMs).toISOString()
+          : null,
+      meetingName: upcomingMeetingName || 'Next Grand Prix',
+      officialName: upcomingMeetingName || 'Next Grand Prix',
+      location: upcomingLocation,
+      country: '',
+      sessions,
+      activeSession: null,
+      weather: null,
+      drivers: [],
+      raceControl: [],
+      teamRadio: [],
+    };
+    setBoundedCache(cacheKey, { ts: now, data: closedResult });
+    return closedResult;
+  }
+
   // Choose which session to inspect:
   // explicit sessionCode -> currently live session -> latest finished session with data -> first session
   const requestedCode = safeCode;
@@ -229,7 +302,7 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
     null;
 
   const activeCode = activeSessionMeta?.code || 'FP2';
-  const espnActive = espnEvents.find((e) => e.code === activeCode) || null;
+  const espnActive = activeEspnEvents.find((e) => e.code === activeCode) || null;
   const openActive = openByCode.get(activeCode) || null;
   const targetSessionKey = openActive?.session_key || 'latest';
 
@@ -474,7 +547,7 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
   const meetingName =
     openMeeting?.meeting_name ||
     espnActive?.meetingName ||
-    espnEvents[0]?.meetingName ||
+    activeEspnEvents[0]?.meetingName ||
     'Grand Prix Weekend';
 
   const location =
@@ -484,6 +557,8 @@ export async function fetchF1Telemetry({ sessionCode = '', force = false } = {})
     '';
 
   const result = {
+    telemetryClosed: false,
+    raceEndTime: Number.isFinite(resolvedRaceEndMs) ? new Date(resolvedRaceEndMs).toISOString() : null,
     meetingName,
     officialName: openMeeting?.meeting_official_name || meetingName,
     location,

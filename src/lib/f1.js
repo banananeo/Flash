@@ -251,6 +251,96 @@ export function countdownParts(targetMs, nowMs = Date.now()) {
   return { d, h, m, s, live }
 }
 
+// Determines whether telemetry is currently active (from Practice 1 start until
+// 3 hours after the Race finishes), or closed awaiting the next race weekend.
+export const TELEMETRY_POST_RACE_MS = 3 * 3600 * 1000
+const EST_GP_DURATION_MS = 2 * 3600 * 1000
+
+export function buildWeekendSessions(race) {
+  if (!race) return []
+  const out = []
+  for (const [code, label] of Object.entries(F1_SESSION_NAMES)) {
+    const raw = code === 'race' ? race.dateUTC : race.sessions?.[code]
+    const dateUTC = raw instanceof Date ? raw : raw ? new Date(raw) : null
+    if (!dateUTC || !Number.isFinite(dateUTC.getTime())) continue
+    out.push({ code: code.toUpperCase(), label, dateUTC })
+  }
+  out.sort((a, b) => a.dateUTC.getTime() - b.dateUTC.getTime())
+  return out
+}
+
+export function getTelemetryWeekendState(races, telemetry, nowMs = Date.now()) {
+  const list = [...(races || [])].sort((a, b) => a.round - b.round)
+  const hasLiveSession = Boolean(telemetry?.sessions?.some((s) => s.status === 'live'))
+
+  // Check if backend explicitly closed telemetry or reported a raceEndTime > 3h ago
+  const reportedEndMs = telemetry?.raceEndTime ? Date.parse(telemetry.raceEndTime) : NaN
+  const reportedExpired =
+    Boolean(telemetry?.telemetryClosed) ||
+    (Number.isFinite(reportedEndMs) && nowMs > reportedEndMs + TELEMETRY_POST_RACE_MS)
+
+  if (!reportedExpired) {
+    if (hasLiveSession) {
+      return { isOpen: true, nextWeekend: null, targetDateUTC: null, targetLabel: '', weekendSessions: [] }
+    }
+    for (const r of list) {
+      const raceStartMs = r.dateUTC instanceof Date ? r.dateUTC.getTime() : r.dateUTC ? Date.parse(r.dateUTC) : NaN
+      if (!Number.isFinite(raceStartMs)) continue
+      const ws = buildWeekendSessions(r)
+      const weekendStartMs = ws.length ? ws[0].dateUTC.getTime() : raceStartMs - 52 * 3600 * 1000
+      const sameRaceReportedEnd =
+        Number.isFinite(reportedEndMs) && Math.abs(reportedEndMs - raceStartMs) < 36 * 3600 * 1000
+          ? reportedEndMs
+          : NaN
+      const raceEndMs = Number.isFinite(sameRaceReportedEnd)
+        ? sameRaceReportedEnd
+        : raceStartMs + EST_GP_DURATION_MS
+      const cutoffMs = raceEndMs + TELEMETRY_POST_RACE_MS
+
+      if (nowMs >= weekendStartMs && nowMs <= cutoffMs) {
+        return { isOpen: true, activeRace: r, nextWeekend: null, targetDateUTC: null, targetLabel: '', weekendSessions: [] }
+      }
+    }
+  }
+
+  // Telemetry is closed (>3h after previous race, before next weekend's FP1).
+  // Find the upcoming race weekend strictly ahead of nowMs.
+  let nextWeekend = null
+  for (const r of list) {
+    const raceStartMs = r.dateUTC instanceof Date ? r.dateUTC.getTime() : r.dateUTC ? Date.parse(r.dateUTC) : NaN
+    if (!Number.isFinite(raceStartMs)) continue
+    if (raceStartMs > nowMs) {
+      nextWeekend = r
+      break
+    }
+  }
+
+  let weekendSessions = buildWeekendSessions(nextWeekend)
+  if (!weekendSessions.length && Array.isArray(telemetry?.sessions)) {
+    weekendSessions = telemetry.sessions
+      .filter((s) => s.date && Number.isFinite(Date.parse(s.date)))
+      .map((s) => ({
+        code: s.code,
+        label: s.name || s.code,
+        dateUTC: new Date(s.date),
+      }))
+      .sort((a, b) => a.dateUTC.getTime() - b.dateUTC.getTime())
+  }
+
+  const nextUpcomingSession =
+    weekendSessions.find((s) => s.dateUTC.getTime() > nowMs) || weekendSessions[0] || null
+  const targetDateUTC = nextUpcomingSession?.dateUTC || nextWeekend?.dateUTC || null
+  const targetLabel = nextUpcomingSession?.label || 'Race Weekend'
+
+  return {
+    isOpen: false,
+    nextWeekend,
+    targetDateUTC,
+    targetLabel,
+    weekendSessions,
+  }
+}
+
 const smem = { schedule: null, scheduleTs: 0 }
 const SCHEDULE_TTL = 24 * 3600 * 1000
 
@@ -386,7 +476,7 @@ export async function fetchF1Telemetry(sessionCode = '') {
   if (hit && Date.now() - hit.ts < TELEMETRY_TTL) return hit.val
   const qs = sessionCode ? `&session=${encodeURIComponent(sessionCode)}` : ''
   const val = await fetchSameOrigin(`/api/f1standings?kind=telemetry${qs}`, { timeoutMs: 18000 })
-  if (val?.drivers?.length) {
+  if (val?.drivers?.length || val?.telemetryClosed) {
     tmem.set(key, { ts: Date.now(), val })
     if (val.activeSession?.code) {
       tmem.set(val.activeSession.code, { ts: Date.now(), val })

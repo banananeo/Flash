@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { countdownParts, deriveNextSession } from '../../lib/f1'
 
-// Country flag colors for minimal editorial flag strip (matches 07 · Formula 1)
-const COUNTRY_CODE = {
+const COUNTRY_FLAG = {
   Australia: '🇦🇺',
   China: '🇨🇳',
   Japan: '🇯🇵',
@@ -28,7 +28,7 @@ const COUNTRY_CODE = {
   UAE: '🇦🇪',
 }
 
-function fmtDateUTC(dateUTC) {
+function fmtDateShort(dateUTC) {
   if (!dateUTC) return ''
   try {
     const d = new Date(dateUTC)
@@ -40,20 +40,16 @@ function fmtDateUTC(dateUTC) {
   }
 }
 
-function fmtTimeUTC(dateUTC) {
-  if (!dateUTC) return ''
-  try {
-    const d = new Date(dateUTC)
-    const hh = String(d.getUTCHours()).padStart(2, '0')
-    const mm = String(d.getUTCMinutes()).padStart(2, '0')
-    return `${hh}:${mm} UTC`
-  } catch {
-    return ''
-  }
-}
+const pad2 = (n) => String(n).padStart(2, '0')
 
-// 07 · Formula 1 — UP NEXT Grand Prix card
-export default function F1Countdown({ nextRace, schedule, season }) {
+// Minimalist UP NEXT Grand Prix card + compact single-line ticker for secondary tabs
+export default function F1Countdown({
+  nextRace,
+  schedule,
+  season,
+  compact = false,
+  onOpenCalendar,
+}) {
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -85,93 +81,145 @@ export default function F1Countdown({ nextRace, schedule, season }) {
   })
 
   if (!nextRace?.dateUTC && !nextSession) {
+    if (compact) return null
     return (
-      <div className="rounded-[20px] border border-hairline bg-white p-6 text-ink shadow-sm">
-        <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+      <div className="rounded-[22px] border border-hairline bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted">
           SEASON COMPLETE
         </p>
-        <p className="mt-2.5 text-[24px] font-semibold leading-tight">
-          {season || '2026'} World Championship concluded.
+        <p className="mt-2 text-[22px] font-semibold leading-tight tracking-[-0.02em] text-ink">
+          {season || '2026'} World Championship concluded
         </p>
       </div>
     )
   }
 
-  const flag = COUNTRY_CODE[nextRace?.country] || ''
+  const flag = COUNTRY_FLAG[nextRace?.country] || ''
+  const locationLine = [nextRace?.circuit, nextRace?.locality || nextRace?.country]
+    .filter(Boolean)
+    .join(' · ')
+
+  if (compact) {
+    const shortName = (nextRace?.name || nextSession?.raceName || 'Grand Prix').replace(
+      'Grand Prix',
+      'GP',
+    )
+    return (
+      <button
+        type="button"
+        onClick={onOpenCalendar}
+        className="group flex w-full items-center justify-between gap-3 rounded-full border border-hairline bg-white px-4 py-2.5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.02)] transition-colors hover:border-hairline-soft"
+      >
+        <div className="flex min-w-0 items-center gap-2 text-[12px]">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-pulse" />
+          <span className="truncate font-semibold text-ink">
+            {flag ? `${flag} ` : ''}
+            {shortName}
+          </span>
+          {nextSession && (
+            <span className="truncate text-muted">· {nextSession.label}</span>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {countdown && (
+            <span className="font-display text-[12px] font-bold tabular-nums text-brand-strong">
+              {countdown.d > 0 ? `${countdown.d}d ` : ''}
+              {pad2(countdown.h)}h {pad2(countdown.m)}m
+            </span>
+          )}
+          <ChevronRight
+            size={13}
+            className="text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-ink"
+          />
+        </div>
+      </button>
+    )
+  }
 
   return (
-    <div className="rounded-[20px] border border-hairline bg-white p-6 text-ink shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
-            {nextRace ? `UP NEXT / ROUND ${nextRace.round}` : 'UP NEXT'}
-          </p>
-          <h2 className="mt-3 text-[26px] font-semibold leading-[1.18] tracking-[-0.015em] text-ink">
-            {nextRace?.name || 'Formula 1 session'}
-          </h2>
-        </div>
-
-
-      </div>
-
-      {nextRace && <div className="mt-6 flex items-end justify-between gap-4">
-        <p className="min-w-0 truncate text-[12px] font-medium text-muted">
-          {nextRace.circuit || nextRace.locality}
-        </p>
-        <div className="shrink-0 text-right">
-          <p className="font-display text-[15px] font-bold text-brand-strong">
-            {fmtDateUTC(nextRace.dateUTC)}
-          </p>
-
-        </div>
-      </div>}
-
-      <div className="mt-5 rounded-[16px] bg-sage-tint p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-brand-strong">
-              NEXT SESSION
-            </p>
-            {nextSession ? (
-              <>
-                <p className="mt-1.5 text-[15px] font-semibold leading-tight text-ink">
-                  {nextSession.label}
-                </p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-muted">
-                  {nextSession.raceName}{nextSession.circuit ? ` · ${nextSession.circuit}` : ''}
-                </p>
-              </>
-            ) : (
-              <p className="mt-1.5 text-[13px] font-semibold text-ink">No upcoming session times available.</p>
-            )}
-          </div>
-          {nextSession && (
-            <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-brand-strong">
-              Local time
+    <div className="rounded-[22px] border border-hairline bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.03)] sm:p-6">
+      {/* Top Meta Row */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-pulse" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-brand-strong">
+            {nextRace ? `UP NEXT · ROUND ${nextRace.round}` : 'UP NEXT'}
+          </span>
+          {nextRace?.hasSprint && (
+            <span className="rounded-full bg-sage px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-ink">
+              Sprint
             </span>
           )}
         </div>
 
-        {nextSession && countdown && (
-          <>
-            <p className="mt-3 text-[11px] font-semibold text-muted">{sessionDateLocal}</p>
-            <div className="mt-3 grid grid-cols-4 gap-2">
+        {nextRace?.dateUTC && (
+          <span className="font-display text-[12px] font-semibold tracking-[0.06em] text-muted">
+            {fmtDateShort(nextRace.dateUTC)}
+          </span>
+        )}
+      </div>
+
+      {/* Race Title + Single Location Line */}
+      <div className="mt-3">
+        <h2 className="text-[24px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink sm:text-[28px]">
+          {flag && <span className="mr-2">{flag}</span>}
+          {nextRace?.name || nextSession?.raceName || 'Formula 1 Grand Prix'}
+        </h2>
+        {locationLine && (
+          <p className="mt-1 truncate text-[13px] font-medium text-muted">{locationLine}</p>
+        )}
+      </div>
+
+      {/* Hairline Divider + Session Countdown */}
+      <div className="mt-5 border-t border-hairline pt-4">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted">
+              NEXT SESSION
+            </p>
+            {nextSession ? (
+              <>
+                <p className="mt-1 text-[15px] font-semibold leading-snug text-ink">
+                  {nextSession.label}
+                </p>
+                <p className="mt-0.5 text-[12px] font-medium text-muted">{sessionDateLocal}</p>
+              </>
+            ) : (
+              <p className="mt-1 text-[13px] font-medium text-muted">
+                Session schedule to be confirmed
+              </p>
+            )}
+          </div>
+
+          {nextSession && countdown && (
+            <div
+              aria-label="Time until next session"
+              className="flex items-baseline gap-2.5 self-start rounded-[14px] bg-sage/65 px-3.5 py-2.5 sm:self-auto sm:bg-transparent sm:p-0"
+            >
               {[
-                { label: 'Days', value: countdown.d },
-                { label: 'Hours', value: countdown.h },
-                { label: 'Mins', value: countdown.m },
-                { label: 'Secs', value: countdown.s },
-              ].map((part) => (
-                <div key={part.label} className="rounded-[11px] bg-white px-2 py-2 text-center">
-                  <p className="font-display text-[19px] font-bold leading-none text-ink">
-                    {String(part.value).padStart(2, '0')}
-                  </p>
-                  <p className="mt-1 text-[9px] font-bold uppercase tracking-wide text-muted">{part.label}</p>
+                { label: 'D', full: 'Days', value: countdown.d },
+                { label: 'H', full: 'Hrs', value: countdown.h },
+                { label: 'M', full: 'Min', value: countdown.m },
+                { label: 'S', full: 'Sec', value: countdown.s },
+              ].map((part, i) => (
+                <div key={part.label} className="flex items-baseline gap-2.5">
+                  {i > 0 && (
+                    <span className="font-display text-[16px] font-medium text-muted/50">:</span>
+                  )}
+                  <div className="text-center sm:min-w-[34px]">
+                    <p className="font-display text-[22px] font-bold leading-none tabular-nums tracking-tight text-ink sm:text-[25px]">
+                      {pad2(part.value)}
+                    </p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.08em] text-muted">
+                      {part.full}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
